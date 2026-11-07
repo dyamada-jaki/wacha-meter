@@ -5,8 +5,8 @@ import { createHmac } from 'node:crypto';
 
 /**
  * 有効期間（秒）。公式資料の最小は iat から 1800 秒だが、SDK 7.1.5.4434 は
- * ちょうど 1800 秒の JWT を SDKAuth の呼び出し時点で SDKERR_INTERNAL_ERROR として拒否した（手元の実測）。
- * 余裕をもって 1 時間にする（上限は 48 時間）。
+ * exp − iat = 1800 秒の JWT を SDKAuth の呼び出し時点で SDKERR_INTERNAL_ERROR として拒否した（手元の実測。
+ * 1801 秒は受理）。残りの有効期間を SDK の時計で確かめているとみられるので、余裕をもって 1 時間にする（上限は 48 時間）。
  */
 export const SDK_JWT_TTL_SECONDS = 3600;
 

@@ -13,7 +13,7 @@
 
 - 準備済みの共通基盤: Node.js 24 + TypeScript（strict）+ Vitest + ESLint
 - 実行環境: 共通コードはローカルの Node.js。CI は Ubuntu + Node.js。接続試作は今の Mac の OrbStack / Docker 上の ARM64 Ubuntu 24.04。SDK 本体は Git 管理外の `.local/` に展開して使う（prototypes/zoom/README.md）
-- React・Vite・会議 SDK・課金 API はまだ導入していない。C++ / Docker のビルド準備は prototypes/zoom/Dockerfile に置く。Linux ARM64 SDK 7.1.5.4434 の初期化・認証の検証プログラムは prototypes/zoom/auth-probe（Issue #1）
+- React・Vite・課金 API はまだ導入していない。会議 SDK は試作（prototypes/zoom）でのみ使い、src/ のアプリには組み込んでいない。C++ / Docker のビルド準備は prototypes/zoom/Dockerfile に置く。Linux ARM64 SDK 7.1.5.4434 の初期化・認証の検証プログラムは prototypes/zoom/auth-probe（Issue #1）
 
 ## コマンド
 - `npm ci` — 開発依存をインストール
