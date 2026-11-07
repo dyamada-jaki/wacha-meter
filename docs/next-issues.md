@@ -9,16 +9,16 @@
 | 構想 | ユーザーの依頼を spec.md に記録済み |
 | 実現方法 | 無料を基本に Zoom 有料アカウントも許容。他者主催会議が必要。SDK のボット向け認証資料と用途制限が不整合のため、自作 SDK ボットは採用保留。Recall.ai・RTMS は追加課金のため除外。方式は未決 |
 | 制作の環境 | Node.js 24 / TypeScript / Vitest / ESLint を導入。型チェック・Lint・ビルドが成功。テスト0件を許可する準備用コマンドのみ成功 |
-| CI | ローカルに定義を用意。push 前のため GitHub 上の実行は未確認 |
+| CI | main への push により GitHub Actions で実行。結果確認中 |
 | 開発プロセス | ラベル・PO 登録済み。起動係はこのリポジトリ専用に作成、無効のまま |
-| main 取り込み | 準備内容のコミット・push をユーザー承認済み。反映作業中 |
+| main 取り込み | 初期準備を f0544d7 でコミットし、origin/main へ push 済み |
 | 実機検証 | Zoom などへの接続、観測、採点、通知すべて未実施 |
 | 区切り1 | 範囲承認済み：今の Mac で Zoom に独立した参加者として入室し、許可後の音声取得まで。SDK 取得済み、SDK 実行・会議接続は未検証で未達 |
 | 接続試作の環境 | ARM64 Ubuntu 24.04 の Docker イメージを構築。C++ / GLib / libcurl のコンパイル・実行、PulseAudio と仮想音声デバイスの動作を確認。Zoom SDK はまだ含まない |
 
 ## 登録済み Issue
 
-[Issue #1: Zoom Meeting SDK を ARM64 Linux に組み込み、初期化・認証を確認する](https://github.com/dyamada-jaki/wacha-meter/issues/1) を着手条件付きで先行登録した。開発可は未付与、開発チームは未起動。初期セットアップの main 反映後に着手条件を確認する。実装は開発チームが担当する。
+[Issue #1: Zoom Meeting SDK を ARM64 Linux に組み込み、初期化・認証を確認する](https://github.com/dyamada-jaki/wacha-meter/issues/1) は、初期セットアップの main 反映と SDK の所在を確認して「開発可」に変更した。ユーザー承認に基づき、開発チームを手動起動する。実装は開発チームが担当し、最初に計画を提示する。
 
 ユーザー取得の Linux ARM64 SDK 7.1.5.4434 はアーカイブ内容と実バイナリの AArch64 を確認済み。[受領記録](../prototypes/zoom/README.md)。認証情報のローカル設定と SDK の実動作はまだ確認していない。
 
@@ -55,4 +55,4 @@
 - 起動係: `開発チーム起動（wacha-meter）`、ID `6ede30fc-0db9-4b31-bab1-18decf0b0005`。無効で作成。有効化はユーザー確認後。
 - 開発依存の監査: minimatch を原因とする moderate 10件。通常更新では未解消。詳細は [準備記録](research/setup-status.md)。
 
-- 今の依存事項: 初期セットアップの main 反映、開発用アプリの認証情報のローカル設定。SDK は受領済み。Client Secret のチャット共有は不要。
+- 実認証確認の依存事項: 開発用アプリの認証情報のローカル設定。設定手順を実装してからユーザーに案内する。設定前でも計画・実装・認証不要の検証は進める。SDK は受領済み。Client Secret のチャット共有は不要。
