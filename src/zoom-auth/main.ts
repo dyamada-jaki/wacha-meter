@@ -21,6 +21,17 @@ const session = createProbeSession({
   log: (line) => console.error(line),
 });
 
+// 中断（Ctrl+C の SIGINT、停止の SIGTERM）は一度だけ受けて、自分のコンテナを止めて片付けてから
+// 130 / 143 で終了する。後始末の途中で届いた2回目以降のシグナルでは、後始末を打ち切らない。
+let interrupted = false;
+for (const signal of ['SIGINT', 'SIGTERM'] as const) {
+  process.on(signal, () => {
+    if (interrupted) return;
+    interrupted = true;
+    void session.interrupt(signal).then((code) => process.exit(code));
+  });
+}
+
 try {
   process.exitCode = await runCli(process.argv.slice(2), {
     env,

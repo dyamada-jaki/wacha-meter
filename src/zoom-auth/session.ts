@@ -1,15 +1,18 @@
 // 検証プログラムを Docker で 1 回動かし、結果の判定と後始末までを行う。
 // main.ts（入口）から使う。docker コマンドの名前・環境変数・時間の上限を外から渡せるようにして、
 // テストでは PATH に置いた偽の docker で確かめる。
+//
+// 有限時間で終わること: docker run は上限＋猶予で止める（run.ts）。docker kill / ps / rm は
+// 非同期に呼び、それぞれ上限を過ぎたら SIGKILL する。Docker が応答しなくても後始末は終わる。
 
-import { spawnSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import type { ProbeRequest } from './cli.js';
 import { buildDockerKillArgs, buildDockerRunArgs, makeContainerName } from './docker.js';
-import { classifyProbeRun, type ProbeOutcome } from './outcome.js';
-import { runWithTimeout } from './run.js';
+import { classifyProbeRun, withCleanup, type CleanupResult, type ProbeOutcome } from './outcome.js';
+import { runWithTimeout, type RunResult } from './run.js';
 
 export interface ProbeSessionConfig {
   readonly sdkDir: string;
@@ -22,7 +25,7 @@ export interface ProbeSessionConfig {
   readonly hostMarginSeconds: number;
   /** init のホスト側の上限（秒） */
   readonly initHostLimitSeconds: number;
-  /** docker kill のあと、docker コマンドを強制終了するまでの猶予 */
+  /** docker kill を待つ上限。また docker kill のあと、docker run を強制終了するまでの猶予 */
   readonly killGraceMs: number;
   /** docker ps / rm を待つ上限 */
   readonly dockerCommandTimeoutMs: number;
@@ -40,8 +43,33 @@ export interface ProbeSession {
 
 export type InterruptSignal = 'SIGINT' | 'SIGTERM';
 
+const INTERRUPT_EXIT_CODES = { SIGINT: 130, SIGTERM: 143 } as const;
+
+interface DockerResult {
+  /** 終了コード 0 で終わったか（上限超過・起動失敗は false） */
+  readonly ok: boolean;
+  readonly stdout: string;
+}
+
 export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
   const { childEnv, log } = config;
+  /** 起動中のコンテナ名（起動前・後始末後は undefined） */
+  let activeContainer: string | undefined;
+  /** 中断したら docker run のクライアントを止める */
+  const abort = new AbortController();
+  let interruption: Promise<number> | undefined;
+
+  /** docker を非同期に呼ぶ。上限を過ぎたら SIGKILL する。失敗しても例外にしない */
+  function docker(args: readonly string[], timeoutMs: number): Promise<DockerResult> {
+    return new Promise((resolveResult) => {
+      execFile(
+        'docker',
+        [...args],
+        { env: { ...childEnv }, encoding: 'utf8', timeout: timeoutMs, killSignal: 'SIGKILL' },
+        (error, stdout) => resolveResult({ ok: error === null, stdout }),
+      );
+    });
+  }
 
   async function runProbe(request: ProbeRequest): Promise<ProbeOutcome> {
     if (!existsSync(resolve(config.sdkDir, 'libmeetingsdk.so'))) {
@@ -54,63 +82,115 @@ export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
         `検証プログラムが見つかりません: ${config.probeBuildDir}（prototypes/zoom/scripts/build-probe.sh でビルドしてください）`,
       );
     }
+    if (interruption !== undefined) return waitForever();
+
     const containerName = makeContainerName(config.containerPrefix, randomBytes(4).toString('hex'));
     const hostLimitSeconds =
       request.mode === 'auth' ? request.authTimeoutSeconds + config.hostMarginSeconds : config.initHostLimitSeconds;
 
-    const result = await runWithTimeout({
-      command: 'docker',
-      args: buildDockerRunArgs({
-        image: config.image,
-        containerName,
-        sdkDir: config.sdkDir,
-        probeBuildDir: config.probeBuildDir,
-        mode: request.mode,
-        authTimeoutSeconds: request.authTimeoutSeconds,
-        offline: request.offline,
-      }),
-      env: childEnv,
-      ...(request.jwt === undefined ? {} : { stdin: `${request.jwt}\n` }),
-      timeoutMs: hostLimitSeconds * 1000,
-      killGraceMs: config.killGraceMs,
-      onTimeout: async () => {
-        spawnSync('docker', buildDockerKillArgs(containerName), { env: childEnv, stdio: 'ignore' });
-      },
-    });
+    activeContainer = containerName;
+    let result: RunResult;
+    try {
+      result = await runWithTimeout({
+        command: 'docker',
+        args: buildDockerRunArgs({
+          image: config.image,
+          containerName,
+          sdkDir: config.sdkDir,
+          probeBuildDir: config.probeBuildDir,
+          mode: request.mode,
+          authTimeoutSeconds: request.authTimeoutSeconds,
+          offline: request.offline,
+        }),
+        env: childEnv,
+        ...(request.jwt === undefined ? {} : { stdin: `${request.jwt}\n` }),
+        timeoutMs: hostLimitSeconds * 1000,
+        killGraceMs: config.killGraceMs,
+        onTimeout: async () => {
+          await docker(buildDockerKillArgs(containerName), config.killGraceMs);
+        },
+        abortSignal: abort.signal,
+      });
+    } catch (error) {
+      // 中断の後始末は interrupt が行い、終了コードも interrupt が決める
+      if (interruption !== undefined) return waitForever();
+      throw error;
+    }
+    if (interruption !== undefined) return waitForever();
 
     for (const line of probeProgressLines(result.stderr)) log(line);
-    ensureContainerRemoved(containerName);
-    return classifyProbeRun({
+    const cleanup = await ensureContainerRemoved(containerName);
+    activeContainer = undefined;
+    const outcome = classifyProbeRun({
       mode: request.mode,
       exitCode: result.exitCode,
       stdout: result.stdout,
+      stderr: result.stderr,
       hostTimedOut: result.timedOut,
     });
+    return withCleanup(outcome, cleanup);
   }
 
-  /** 終了後に同名のコンテナが残っていないことを確かめ、残っていれば削除して知らせる。 */
-  function ensureContainerRemoved(containerName: string): void {
-    const listed = spawnSync('docker', ['ps', '-a', '-q', '--filter', `name=^/${containerName}$`], {
-      env: childEnv,
-      encoding: 'utf8',
-    });
-    if (listed.status !== 0) {
-      log(`コンテナの残りを確認できませんでした: ${containerName}`);
-      return;
+  /**
+   * 同名のコンテナが残っていないことを確かめ、残っていれば削除してもう一度確かめる。
+   * 最後の確認で残っていないと分かったときだけ、片付いたとする。
+   */
+  async function ensureContainerRemoved(containerName: string): Promise<CleanupResult> {
+    const listArgs = ['ps', '-a', '-q', '--filter', `name=^/${containerName}$`];
+    const uncheckable = `コンテナの残りを確認できませんでした: ${containerName}（docker ps -a で確かめてください）`;
+    const listed = await docker(listArgs, config.dockerCommandTimeoutMs);
+    if (!listed.ok) {
+      log(uncheckable);
+      return 'check_failed';
     }
     if (listed.stdout.trim() === '') {
       log(`コンテナは残っていません: ${containerName}`);
-      return;
+      return 'absent';
     }
-    spawnSync('docker', ['rm', '-f', containerName], { env: childEnv, stdio: 'ignore' });
+    const removed = await docker(['rm', '-f', containerName], config.dockerCommandTimeoutMs);
+    const recheck = await docker(listArgs, config.dockerCommandTimeoutMs);
+    if (!recheck.ok) {
+      log(uncheckable);
+      return 'check_failed';
+    }
+    if (recheck.stdout.trim() !== '') {
+      log(`コンテナを削除できませんでした: ${containerName}（docker rm -f ${containerName} で削除してください）`);
+      return 'remove_failed';
+    }
+    // rm が失敗しても、--rm による削除が先に終わっていれば残りはない
+    if (!removed.ok) {
+      log(`コンテナは残っていません: ${containerName}`);
+      return 'absent';
+    }
     log(`残っていたコンテナを削除しました: ${containerName}`);
+    return 'removed';
   }
 
   function interrupt(signal: InterruptSignal): Promise<number> {
-    return Promise.reject(new Error(`未実装: ${signal}`));
+    interruption ??= (async () => {
+      log(`中断を受けました（${signal}）。検証プログラムを止めて後始末をします。`);
+      const containerName = activeContainer;
+      if (containerName !== undefined) {
+        await docker(buildDockerKillArgs(containerName), config.killGraceMs);
+      }
+      abort.abort();
+      if (containerName !== undefined) {
+        const cleanup = await ensureContainerRemoved(containerName);
+        if (cleanup === 'remove_failed' || cleanup === 'check_failed') {
+          log('コンテナが残っている可能性があります。上の案内に従って確かめてください。');
+        }
+      }
+      return INTERRUPT_EXIT_CODES[signal];
+    })();
+    return interruption;
   }
 
   return { runProbe, interrupt };
+}
+
+/** 中断の後は通常の結果を出さない（interrupt の終わりにプロセスを終了する） */
+function waitForever(): Promise<never> {
+  return new Promise<never>(() => undefined);
 }
 
 /**

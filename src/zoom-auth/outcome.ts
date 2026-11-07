@@ -49,7 +49,12 @@ export function classifyProbeRun(run: ProbeRun): ProbeOutcome {
     .split('\n')
     .filter((line) => line.startsWith(RESULT_LINE_PREFIX))
     .at(-1);
-  if (raw === undefined) return { kind: 'probe_error', reason: 'no_result' };
+  if (raw === undefined) {
+    if (run.exitCode !== null && DOCKER_RUN_FAILURE_CODES.has(run.exitCode)) {
+      return { kind: 'docker_failed', exitCode: run.exitCode, dockerLines: dockerErrorLines(run.stderr ?? '') };
+    }
+    return { kind: 'probe_error', reason: 'no_result' };
+  }
 
   const result = parseResultLine(raw.slice(RESULT_LINE_PREFIX.length));
   if (result === undefined) return { kind: 'probe_error', reason: 'malformed_result' };
@@ -70,6 +75,30 @@ export function classifyProbeRun(run: ProbeRun): ProbeOutcome {
       return { kind: 'sdk_error', stage, code };
     }
   }
+}
+
+/** docker run 自身の失敗を表す終了コード（125: docker の失敗、126: 実行できない、127: 見つからない） */
+const DOCKER_RUN_FAILURE_CODES: ReadonlySet<number> = new Set([125, 126, 127]);
+
+/**
+ * 標準エラーから docker CLI 自身のエラー（docker: で始まる行）だけを取り出す。
+ * JWT は標準入力で渡し引数・環境変数に載せないので、これらの行に秘密は入らない。
+ * 検証プログラムや SDK の出力は、何を含むか分からないため出さない。
+ */
+export function dockerErrorLines(stderr: string): string[] {
+  return stderr.split('\n').filter((line) => line.startsWith('docker: '));
+}
+
+/** 後始末（コンテナの残りの確認・削除）の結果 */
+export type CleanupResult = 'absent' | 'removed' | 'remove_failed' | 'check_failed';
+
+/**
+ * 後始末の結果を判定に加える。コンテナを削除できない・残りを確認できないときは成功にしない。
+ * 検証プログラムがすでに失敗・時間切れなら、その結果（終了コード）を保つ。
+ */
+export function withCleanup(outcome: ProbeOutcome, cleanup: CleanupResult): ProbeOutcome {
+  if (cleanup === 'absent' || cleanup === 'removed') return outcome;
+  return outcome.kind === 'succeeded' ? { kind: 'cleanup_failed', reason: cleanup } : outcome;
 }
 
 function parseResultLine(json: string): ResultLine | undefined {
@@ -107,7 +136,7 @@ export function exitCodeFor(outcome: ProbeOutcome): number {
       return EXIT_CODES.other;
     case 'docker_failed':
     case 'cleanup_failed':
-      throw new Error('未実装');
+      return EXIT_CODES.other;
   }
 }
 
@@ -135,7 +164,13 @@ export function describeOutcome(outcome: ProbeOutcome): string {
     case 'probe_error':
       return `検証プログラムの結果を確認できませんでした（${PROBE_ERROR_LABELS[outcome.reason]}）。成功とは扱いません。`;
     case 'docker_failed':
+      return [
+        `Docker がコンテナを起動できませんでした（終了コード ${outcome.exitCode}）。イメージ名と、検証プログラムのビルドを確認してください。`,
+        ...outcome.dockerLines,
+      ].join('\n');
     case 'cleanup_failed':
-      throw new Error('未実装');
+      return outcome.reason === 'remove_failed'
+        ? '検証プログラムは成功しましたが、コンテナを削除できませんでした。成功とは扱いません。'
+        : '検証プログラムは成功しましたが、コンテナが残っていないことを確認できませんでした。成功とは扱いません。';
   }
 }

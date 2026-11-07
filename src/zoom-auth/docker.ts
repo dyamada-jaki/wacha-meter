@@ -27,6 +27,8 @@ export function buildDockerRunArgs(options: DockerRunOptions): string[] {
   return [
     'run',
     '--rm',
+    // PID 1 に init を置き、docker run が転送する SIGINT / SIGTERM で検証プログラムが止まるようにする
+    '--init',
     '-i',
     '--platform',
     'linux/arm64',

@@ -13,6 +13,8 @@ export interface RunWithTimeoutOptions {
   /** onTimeout のあと、子プロセスを SIGKILL するまでの猶予 */
   readonly killGraceMs: number;
   readonly onTimeout: () => Promise<void>;
+  /** 中断用。abort されたら子プロセスを SIGKILL し、Promise は AbortError で reject する */
+  readonly abortSignal?: AbortSignal;
 }
 
 export interface RunResult {
@@ -27,6 +29,7 @@ export function runWithTimeout(options: RunWithTimeoutOptions): Promise<RunResul
     const child = spawn(options.command, [...options.args], {
       env: { ...options.env },
       stdio: ['pipe', 'pipe', 'pipe'],
+      ...(options.abortSignal === undefined ? {} : { signal: options.abortSignal, killSignal: 'SIGKILL' as const }),
     });
     let stdout = '';
     let stderr = '';
