@@ -1,11 +1,11 @@
 // 検証コマンドの入口（main.js）を実際のプロセスとして起動し、中断のシグナルを送る。
 // docker は PATH に置いた偽物。実物の docker / SDK での中断は手元で確かめる（PR に記録）。
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { createFakeDocker, waitFor, type FakeDocker } from './fake-docker.js';
+import { createFakeDocker, INIT_SUCCEEDED, processAlive, waitFor, type FakeDocker } from './fake-docker.js';
 
 let outDir: string;
 let fake: FakeDocker;
@@ -74,5 +74,22 @@ describe('検証コマンドの中断', () => {
     const result = await main.exited;
     expect(result).toEqual({ code: 130, signal: null });
     expect(fake.calls().some((c) => c.startsWith('ps '))).toBe(true);
+  }, 20000);
+
+  it('通常の後始末で docker ps を待っている間に中断しても、その docker ps が終わってから 130 で終了する', async () => {
+    fake.on('run', INIT_SUCCEEDED);
+    // 通常の後始末で呼ばれる1回目の ps だけが応答に時間がかかる。以降の ps はすぐ「残りなし」を返す
+    fake.on('ps', 'if [ ! -f "$dir/ps.pid" ]; then echo $$ > "$dir/ps.pid"; exec sleep 2; fi');
+    const main = startMain(['init']);
+    await waitFor(() => existsSync(join(fake.dir, 'ps.pid')));
+    const psPid = Number(readFileSync(join(fake.dir, 'ps.pid'), 'utf8'));
+    const started = Date.now();
+    main.child.kill('SIGINT');
+    const result = await main.exited;
+    expect(result).toEqual({ code: 130, signal: null });
+    // 終了した時点で、自分が起動した docker の子プロセスは残っていない（待たずに確かめる）
+    expect(processAlive(psPid)).toBe(false);
+    // docker ps / rm の上限（10 秒）を待たずに終わる
+    expect(Date.now() - started).toBeLessThan(8000);
   }, 20000);
 });

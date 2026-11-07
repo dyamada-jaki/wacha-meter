@@ -69,4 +69,14 @@ export async function waitFor(condition: () => boolean, timeoutMs = 5000): Promi
   }
 }
 
+/** プロセスがまだ生きているか（シグナル 0 で確かめる） */
+export function processAlive(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export const INIT_SUCCEEDED = `echo 'WACHA_PROBE_RESULT {"mode":"init","outcome":"succeeded"}'`;

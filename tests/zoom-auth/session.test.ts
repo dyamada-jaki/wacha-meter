@@ -1,10 +1,10 @@
 // 検証コマンドの実行・後始末・中断を、PATH に置いた偽の docker で確かめる。
 // 実物の docker / SDK との接続は、手元の実 SDK 実行で確かめる（PR に記録）。
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { describeOutcome, exitCodeFor } from '../../src/zoom-auth/outcome.js';
 import { createProbeSession, type ProbeSessionConfig } from '../../src/zoom-auth/session.js';
-import { createFakeDocker, INIT_SUCCEEDED, waitFor, type FakeDocker } from './fake-docker.js';
+import { createFakeDocker, INIT_SUCCEEDED, processAlive, waitFor, type FakeDocker } from './fake-docker.js';
 
 let fake: FakeDocker;
 let logs: string[];
@@ -32,15 +32,6 @@ function session(overrides: Partial<ProbeSessionConfig> = {}) {
 }
 
 const init = { mode: 'init', authTimeoutSeconds: 30, offline: false } as const;
-
-function processAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 describe('ホスト側の時間切れの後始末は有限時間で終わる', () => {
   it('docker kill が応答しなくても、上限と猶予のあと時間切れとして返す', async () => {
@@ -161,6 +152,19 @@ describe('中断（SIGINT / SIGTERM）', () => {
     const pid = Number(readFileSync(`${fake.dir}/run.pid`, 'utf8'));
     await waitFor(() => !processAlive(pid), 2000);
   });
+
+  it('時間切れの docker kill を待っている間に中断しても、その docker kill が終わってから終了コードを返す', async () => {
+    fake.on('run', 'exec sleep 8');
+    // 時間切れで呼ばれる1回目の kill だけが応答に時間がかかる。中断で呼ぶ2回目はすぐ返る
+    fake.on('kill', 'if [ ! -f "$dir/kill.pid" ]; then echo $$ > "$dir/kill.pid"; exec sleep 3; fi');
+    const s = session({ initHostLimitSeconds: 1, killGraceMs: 2500 });
+    void s.runProbe(init);
+    await waitFor(() => existsSync(`${fake.dir}/kill.pid`), 3000);
+    const killPid = Number(readFileSync(`${fake.dir}/kill.pid`, 'utf8'));
+    expect(await s.interrupt('SIGINT')).toBe(130);
+    // 終了コードを返した時点で、自分が起動した docker の子プロセスは残っていない
+    expect(processAlive(killPid)).toBe(false);
+  }, 10000);
 
   it('コンテナを起動する前なら、docker を呼ばずに終了コードを返す', async () => {
     expect(await session().interrupt('SIGTERM')).toBe(143);
