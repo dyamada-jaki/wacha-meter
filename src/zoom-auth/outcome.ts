@@ -22,7 +22,7 @@ export type ProbeOutcome =
   | { readonly kind: 'timed_out'; readonly by: 'sdk' | 'host' }
   | { readonly kind: 'sdk_error'; readonly stage: 'init' | 'auth' | 'cleanup'; readonly code: string }
   | { readonly kind: 'probe_error'; readonly reason: 'no_result' | 'malformed_result' | 'inconsistent_result' }
-  /** docker がコンテナを起動できなかった（結果行がなく、終了コード 125 / 126 / 127） */
+  /** docker がコンテナ・検証プログラムを起動できなかった（結果行がなく、終了コード 125 / 126 / 127） */
   | { readonly kind: 'docker_failed'; readonly exitCode: number; readonly dockerLines: readonly string[] }
   /** 検証プログラムは成功したが、コンテナを削除できなかった・残りを確認できなかった */
   | { readonly kind: 'cleanup_failed'; readonly reason: 'remove_failed' | 'check_failed' };
@@ -81,13 +81,17 @@ export function classifyProbeRun(run: ProbeRun): ProbeOutcome {
 const DOCKER_RUN_FAILURE_CODES: ReadonlySet<number> = new Set([125, 126, 127]);
 
 /**
- * 標準エラーから docker CLI 自身のエラー（docker: で始まる行）だけを取り出す。
+ * 標準エラーから、docker が起動に失敗した理由の行だけを取り出す。
+ * - docker CLI 自身のエラー（docker: で始まる行）
+ * - --init の tini が検証プログラムを実行できなかった行（[FATAL tini (N)] exec <パス> failed: <理由>）
  * JWT は標準入力で渡し引数・環境変数に載せないので、これらの行に秘密は入らない。
  * 検証プログラムや SDK の出力は、何を含むか分からないため出さない。
  */
 export function dockerErrorLines(stderr: string): string[] {
-  return stderr.split('\n').filter((line) => line.startsWith('docker: '));
+  return stderr.split('\n').filter((line) => line.startsWith('docker: ') || TINI_EXEC_FAILURE.test(line));
 }
+
+const TINI_EXEC_FAILURE = /^\[FATAL tini \([0-9]+\)\] exec \S+ failed: /;
 
 /** 後始末（コンテナの残りの確認・削除）の結果 */
 export type CleanupResult = 'absent' | 'removed' | 'remove_failed' | 'check_failed';
