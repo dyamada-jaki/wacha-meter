@@ -20,24 +20,57 @@ export interface DockerRunOptions {
   readonly offline: boolean;
 }
 
+/** コンテナ内の検証プログラムのパス */
+export const PROBE_PATH_IN_CONTAINER = '/opt/zoom-auth-probe/wacha-zoom-auth-probe';
+
 export function buildDockerRunArgs(options: DockerRunOptions): string[] {
-  void options;
-  throw new Error('未実装');
+  return [
+    'run',
+    '--rm',
+    '-i',
+    '--platform',
+    'linux/arm64',
+    '--name',
+    options.containerName,
+    ...(options.offline ? ['--network', 'none'] : []),
+    '-v',
+    `${options.sdkDir}:/opt/zoom-sdk:ro`,
+    '-v',
+    `${options.probeBuildDir}:/opt/zoom-auth-probe:ro`,
+    options.image,
+    PROBE_PATH_IN_CONTAINER,
+    options.mode,
+    ...(options.mode === 'auth' ? [String(options.authTimeoutSeconds)] : []),
+  ];
 }
 
 export function buildDockerKillArgs(containerName: string): string[] {
-  void containerName;
-  throw new Error('未実装');
+  return ['kill', containerName];
 }
+
+const CHILD_ENV_ALLOWLIST = [
+  'PATH',
+  'HOME',
+  'USER',
+  'LANG',
+  'TMPDIR',
+  'DOCKER_HOST',
+  'DOCKER_CONTEXT',
+  'DOCKER_CONFIG',
+  'DOCKER_CERT_PATH',
+  'DOCKER_TLS_VERIFY',
+] as const;
 
 /** docker CLI に渡す環境変数。Docker の接続に必要なものだけを残す。 */
 export function buildChildEnv(env: Readonly<Record<string, string | undefined>>): Record<string, string> {
-  void env;
-  throw new Error('未実装');
+  const result: Record<string, string> = {};
+  for (const name of CHILD_ENV_ALLOWLIST) {
+    const value = env[name];
+    if (value !== undefined) result[name] = value;
+  }
+  return result;
 }
 
 export function makeContainerName(prefix: string, suffix: string): string {
-  void prefix;
-  void suffix;
-  throw new Error('未実装');
+  return `${prefix}-${suffix}`;
 }

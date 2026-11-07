@@ -23,6 +23,32 @@ export type CredentialsResult =
   | { readonly ok: false; readonly errors: readonly CredentialError[] };
 
 export function readCredentials(env: Readonly<Record<string, string | undefined>>): CredentialsResult {
-  void env;
-  throw new Error('未実装');
+  const errors: CredentialError[] = [];
+  const clientId = check(env, CLIENT_ID_VARIABLE, errors);
+  const clientSecret = check(env, CLIENT_SECRET_VARIABLE, errors);
+  if (errors.length > 0 || clientId === undefined || clientSecret === undefined) {
+    return { ok: false, errors };
+  }
+  return { ok: true, credentials: { clientId, clientSecret } };
+}
+
+function check(
+  env: Readonly<Record<string, string | undefined>>,
+  variable: CredentialVariable,
+  errors: CredentialError[],
+): string | undefined {
+  const value = env[variable];
+  if (value === undefined || value.trim() === '') {
+    errors.push({ kind: 'missing', variable, message: `${variable} が設定されていません。` });
+    return undefined;
+  }
+  if (/\s/.test(value)) {
+    errors.push({
+      kind: 'invalid',
+      variable,
+      message: `${variable} に空白または改行が含まれています。値をそのまま貼り付けたか確認してください。`,
+    });
+    return undefined;
+  }
+  return value;
 }

@@ -1,8 +1,14 @@
 // Meeting SDK の認証に使う JWT（HS256）を作る。
 // 形式は SDK 同梱ヘッダー auth_service_interface.h の AuthContext の説明に従う。
 
-/** 公式資料の最小値（iat から 1800 秒以上）に合わせた有効期間。 */
-export const SDK_JWT_TTL_SECONDS = 1800;
+import { createHmac } from 'node:crypto';
+
+/**
+ * 有効期間（秒）。公式資料の最小は iat から 1800 秒だが、SDK 7.1.5.4434 は
+ * ちょうど 1800 秒の JWT を SDKAuth の呼び出し時点で SDKERR_INTERNAL_ERROR として拒否した（手元の実測）。
+ * 余裕をもって 1 時間にする（上限は 48 時間）。
+ */
+export const SDK_JWT_TTL_SECONDS = 3600;
 
 export interface SdkJwtInput {
   readonly clientId: string;
@@ -12,6 +18,18 @@ export interface SdkJwtInput {
 }
 
 export function createSdkJwt(input: SdkJwtInput): string {
-  void input;
-  throw new Error('未実装');
+  const expiresAt = input.issuedAt + SDK_JWT_TTL_SECONDS;
+  const header = encode({ alg: 'HS256', typ: 'JWT' });
+  const payload = encode({
+    appKey: input.clientId,
+    iat: input.issuedAt,
+    exp: expiresAt,
+    tokenExp: expiresAt,
+  });
+  const signature = createHmac('sha256', input.clientSecret).update(`${header}.${payload}`).digest('base64url');
+  return `${header}.${payload}.${signature}`;
+}
+
+function encode(value: object): string {
+  return Buffer.from(JSON.stringify(value), 'utf8').toString('base64url');
 }

@@ -1,6 +1,6 @@
 # Zoom 接続試作の準備
 
-目的は、今の Mac 上で「わちゃメーター」が独立した参加者として入室し、主催者の許可を受けて音声を取得すること。現在はビルド環境と SDK を用意した段階。会議参加プログラムは未実装。
+目的は、今の Mac 上で「わちゃメーター」が独立した参加者として入室し、主催者の許可を受けて音声を取得すること。現在は SDK の初期化・認証を確かめる検証プログラムまで（[Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1)）。会議参加プログラムは未実装。
 
 ## SDK の受領と引き継ぎ
 
@@ -22,6 +22,79 @@ docker run --rm --platform linux/arm64 wacha-meter-zoom-dev:local uname -m
 上の確認はビルド環境の確認であり、Zoom SDK のビルド・動作確認ではない。SDK 入手後、実際のライブラリ依存と API の版を確かめて接続プログラムを作る。Rosetta / x86_64 エミュレーションは使わない。
 
 2026-11-07 の実機確認結果: Docker イメージのビルド成功、実行環境と C++ コンパイラーが aarch64、GLib / libcurl を使う小さな C++ プログラムのコンパイル・実行成功、PulseAudio の起動と仮想出力デバイスの作成成功。Mac のマイクや会議音声は取得していない。
+
+## SDK の初期化・認証の確認（Issue #1）
+
+会議への参加・音声取得・録音は行わない。SDK の初期化と認証の結果だけを確かめて終了する。
+
+### 仕組み
+
+| 部品 | 場所 | 役割 |
+|---|---|---|
+| 検証プログラム（C++） | `auth-probe/` | `init`: InitSDK → CleanUPSDK。`auth <秒>`: 標準入力の JWT で SDKAuth し、結果か時間切れを待って後始末する。結果は `WACHA_PROBE_RESULT {json}` の1行 |
+| 検証コマンド（TypeScript） | `src/zoom-auth/` | 認証情報の確認、JWT（HS256）の作成、Docker の起動、ホスト側の上限での停止、結果の判定と終了コード |
+| SDK 本体・ビルド結果・認証情報 | `.local/`（Git 管理外） | リポジトリ・イメージには入れない |
+
+- JWT は Docker の標準入力で渡す。引数・環境変数には載せない。docker コマンドには Docker の接続に必要な環境変数（PATH・HOME・DOCKER_* など）だけを渡し、`ZOOM_SDK_CLIENT_SECRET` は渡さない
+- SDK のログ・クラッシュダンプは無効。コンテナは `--rm` で毎回消し、終了後に同名のコンテナが残っていないことを確かめて表示する
+- 待ち時間: SDK 側は既定 30 秒（`--timeout` で 1〜600 秒）。ホスト側はその 15 秒後に `docker kill` し、さらに 5 秒で止まらなければ docker コマンドを強制終了する。`init` のホスト側の上限は 45 秒
+- 終了コード: 0 成功 / 1 その他（SDK の初期化・呼び出し・後始末の失敗、結果を読めない）/ 2 設定・使い方の誤り（検証プログラムは起動しない）/ 3 認証失敗 / 4 時間切れ（SDK 側・ホスト側）
+- JWT の有効期間は 1 時間。公式資料の最小は 30 分（1800 秒）だが、SDK 7.1.5.4434 はちょうど 1800 秒の JWT を `SDKAuth` の呼び出し時点で `SDKERR_INTERNAL_ERROR` として拒否した（3600 秒・1801 秒は受け付けた。オフラインのコンテナで確認）
+
+### 手順
+
+```sh
+# 1. SDK を Git 管理外へ展開（SHA-256 を照合する）
+prototypes/zoom/scripts/prepare-sdk.sh ~/Downloads/zoom-meeting-sdk-linux_arm64-7.1.5.4434.tar.xz
+
+# 2. ビルド環境のイメージ（SDK・秘密は入らない）
+docker build --platform linux/arm64 -t wacha-meter-zoom-dev:local prototypes/zoom
+
+# 3. 検証プログラムをコンテナ内でビルド（結果は .local/zoom-auth-probe/build/）
+prototypes/zoom/scripts/build-probe.sh
+
+# 4. 初期化と後始末だけを確認（認証情報は不要）
+npm run zoom:init
+
+# 5. 認証の確認（認証情報の設定後）
+npm run zoom:auth
+npm run zoom:auth -- --timeout 10      # SDK 側の待ち時間を変える
+npm run zoom:auth -- --offline         # ネットワークを切って時間切れを確かめる（Zoom へ要求は届かない）
+```
+
+イメージ名などは環境変数で変えられる: `WACHA_ZOOM_IMAGE`（既定 `wacha-meter-zoom-dev:local`）、`WACHA_ZOOM_CONTAINER_PREFIX`（既定 `wacha-meter-zoom-auth`）、`WACHA_ZOOM_SDK_DIR`、`WACHA_ZOOM_PROBE_BUILD_DIR`。
+
+### 認証情報の設定（ユーザーが行う）
+
+1. Zoom App Marketplace の General App「わちゃメーター（開発用）」で、Meeting SDK の開発用 Client ID と Client Secret を確認する
+2. リポジトリ直下に `.local/zoom-credentials.env` を作り、次の2行を書く（`.local/` は .gitignore 済み。チャット・Issue・PR には貼らない）
+
+   ```
+   ZOOM_SDK_CLIENT_ID=<Client ID>
+   ZOOM_SDK_CLIENT_SECRET=<Client Secret>
+   ```
+
+3. `chmod 600 .local/zoom-credentials.env` で自分だけが読めるようにする
+4. `npm run zoom:auth` を1回実行し、終了コードと表示（成功／`AUTHRET_*` の失敗）を確かめる。自動の再試行はしないので、失敗したら設定を見直してから実行する
+
+未設定・空・空白や改行を含む値は、検証プログラムを起動せずに終了コード 2 で知らせる（値は表示しない）。
+
+### 確認結果（2026-11-07、Issue #1）
+
+環境: macOS（Apple Silicon）、OrbStack の linux/arm64、Ubuntu 24.04 イメージ、Node.js 24.14.0、Meeting SDK 7.1.5.4434。
+
+| 確認 | 結果 |
+|---|---|
+| 実 SDK へのリンク | 成功（`libmeetingsdk.so` とシステムの GLib にリンク） |
+| `npm run zoom:init` | InitSDK・CleanUPSDK とも SDKERR_SUCCESS、終了コード 0 |
+| 認証情報なしで `zoom:auth` | 終了コード 2。検証プログラムは起動しない |
+| ダミーの ID/Secret（乱数）で `zoom:auth` | `AUTHRET_JWTTOKENWRONG`、終了コード 3（Zoom への認証要求） |
+| `--offline --timeout 5` | SDK 側の時間切れ、終了コード 4、約 8 秒で終了 |
+| 応答しない検証プログラム（偽物）で `--timeout 1` | ホスト側の時間切れで docker kill、終了コード 4、約 17 秒で終了 |
+| 実行後のコンテナ | すべての実行で残っていない |
+| **実認証の成功** | **未確認**（ユーザーの認証情報設定待ち） |
+
+SDK の初期化・認証の成功は、ボット用途の採用や外部会議への参加の承認を意味しない（[初期調査](../../docs/research/feasibility.md)）。
 
 ## SDK 入手手順（今回の取得は完了）
 
