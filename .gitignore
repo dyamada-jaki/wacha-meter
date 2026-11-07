@@ -11,3 +11,12 @@ reports
 mutation-artifacts
 .stryker-tmp
 stryker-setup-*.js
+
+# 会議の実データとローカルの秘密情報
+.env.*
+!.env.example
+recordings/
+private-data/
+
+# ローカルの SDK・公式サンプル・ビルド結果（再配布しない）
+.local/

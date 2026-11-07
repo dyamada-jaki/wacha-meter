@@ -1,10 +1,29 @@
-# エージェント開発テンプレート（Spec × Issue × Orca）
+# わちゃメーター
 
-人間が判断し、AI エージェント（Claude Code と Codex）が仕様づくりから実装・レビュー・マージ・ふりかえりまでを進めるための、プロセス一式のテンプレートです。
-エージェントは役割の違う3つの席に分かれ、[Orca](https://github.com/stablyai/orca)（複数の AI エージェントの端末と worktree をまとめて扱うアプリ）の上で動きます。
+オンライン会議に参加して「わちゃわちゃ」を観測し、終了時にスコアを参加者へ知らせるアプリを目指しています。現在は初期調査・開発環境の準備段階で、会議参加・採点機能は未実装です。
 
-> **既定は Web アプリ（Node・Vite・React・Vitest）用です。** 何もしなければこの構成で動きます。
-> 別の種類（スライド・文書など）にするときは、`CLAUDE.md` の「作るもの」と「開発設定」の表、`docs/testing.md` を書き換えます。→ [profiles/README.md](profiles/README.md)
+- [仕様と未決事項](docs/spec.md)
+- [実現方法の初期調査](docs/research/feasibility.md)
+- [現在地・次の Issue 候補](docs/next-issues.md)
+- [最初の Zoom 試作：準備・SDK 入手手順](prototypes/zoom/README.md)
+
+無料でできる構成を基本とし、Zoom の有料アカウントは候補に含めます。その他の有料ボット API・有料 AI API・有料サーバーを前提にせず、手元の PC での実行を優先して調査しています。
+
+## 開発環境
+
+Node.js 24 を使います。接続方式の選定前なので、共通の TypeScript 基盤のみを用意しています。
+
+```sh
+npm ci
+npm run test:setup
+npm run typecheck
+npm run lint
+npm run build
+```
+
+現在はテスト0件です。`test:setup` は初期準備用で、機能検証を意味しません。最初の機能 Issue で CI と開発設定を `npm run test` に切り替えます。開発サーバーや画面はまだありません。
+
+以下は、このリポジトリで使うエージェント開発プロセスの説明です。
 
 ## 仕組み
 

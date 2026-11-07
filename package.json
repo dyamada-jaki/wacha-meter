@@ -1,0 +1,25 @@
+{
+  "name": "wacha-meter",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "わちゃメーター：オンライン会議のわちゃわちゃを観測するアプリ（調査・準備段階）",
+  "engines": {
+    "node": ">=24 <25"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:setup": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint . --max-warnings 0",
+    "build": "tsc -p tsconfig.build.json"
+  },
+  "devDependencies": {
+    "@eslint/js": "10.0.1",
+    "@types/node": "24.19.2",
+    "eslint": "10.14.0",
+    "typescript": "5.9.3",
+    "typescript-eslint": "8.72.1",
+    "vitest": "4.1.12"
+  }
+}
