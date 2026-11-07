@@ -22,7 +22,7 @@
 - `npm run typecheck` — 型チェック
 - `npm run lint` — Lint
 - `npm run build` — TypeScript のビルド
-- 最初の機能 Issue で、下表と CI の `test:setup` を `test` に切り替える
+- CI と下表は機能テスト用の `npm run test` を使う。C++ 状態処理のテストには C++17 コンパイラも必要
 
 ## ディレクトリ構成
 ```
@@ -44,7 +44,7 @@ docs/
 | 項目 | 値 |
 |---|---|
 | リポジトリ | `dyamada-jaki/wacha-meter`（既定ブランチ `main`） |
-| 確認コマンド | `npm run test:setup`（準備段階のみ。最初の機能 Issue で `npm run test` に変更） / `npm run typecheck` / `npm run lint` / `npm run build` |
+| 確認コマンド | `npm run test` / `npm run typecheck` / `npm run lint` / `npm run build` |
 | テスト先行 | する（機能追加・振る舞いの変更では、テストを先に書いて失敗を確かめてから作る。→ testing.md 1章） |
 | E2E | なし（導入したらコマンドを書く） |
 | ミューテーション | なし（導入したらコマンドと対象を書く） |

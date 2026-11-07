@@ -19,8 +19,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
-      # 準備段階のみ。最初の機能 Issue で npm run test に切り替える。
-      - run: npm run test:setup
+      - run: c++ --version
+      - run: npm run test
       - run: npm run typecheck
       - run: npm run lint
       - run: npm run build

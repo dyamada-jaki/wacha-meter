@@ -49,13 +49,14 @@ describe('C++のライフサイクル（SDK境界だけfake）', () => {
     ['sdk-timeout', 5, 1, 1, 1], ['pending', 5, 1, 1, 1],
     ['rate-limit', 9, 1, 1, 1], ['init-failure', 3, 0, 1, 0],
     ['cleanup-failure', 6, 1, 0, 1], ['interrupted', 7, 0, 1, 0],
+    ['interrupt-pending', 7, 1, 1, 1],
   ])('%s: 結果を区別し後始末して再試行しない', (scenario, code, initialized, cleaned, attempts) => {
     const actual = execFileSync(executable, [String(scenario)], { encoding: 'utf8', timeout: 2000 }).trim();
     expect(actual).toBe(`${code} ${initialized} ${cleaned} 0 ${attempts}`);
   });
 });
 
-async function dockerFixture(mode: 'success' | 'failure' | 'hang') {
+async function dockerFixture(mode: 'success' | 'failure' | 'hang' | 'cleanup-failure' | 'unconfirmed-success') {
   const directory = await mkdtemp(join(temporary, 'docker-'));
   const executable = join(directory, 'docker.mjs');
   const actions = join(directory, 'actions.jsonl');
@@ -63,11 +64,13 @@ async function dockerFixture(mode: 'success' | 'failure' | 'hang') {
   await writeFile(executable, `#!/usr/bin/env node
 import fs from 'node:fs';
 fs.appendFileSync(${JSON.stringify(actions)}, JSON.stringify(process.argv.slice(2))+'\\n');
-if (process.argv[2] === 'rm') process.exit(0);
+if (process.argv[2] === 'rm') process.exit(${mode === 'cleanup-failure' ? 1 : 0});
 process.stdin.on('data', d => fs.appendFileSync(${JSON.stringify(input)}, d));
 console.log('SDK raw dummy-secret and dummy-jwt');
 console.error('SDK stderr dummy-secret');
-${mode === 'hang' ? 'setInterval(() => {}, 1000);' : `console.log('WACHA_INIT_OK'); console.log('WACHA_CLEAN_OK'); console.log('WACHA_RESULT_${mode === 'success' ? 0 : 4}'); process.stdin.resume(); process.stdin.on('end', () => process.exit(${mode === 'success' ? 0 : 4}));`}
+${mode === 'hang' ? 'setInterval(() => {}, 1000);' : mode === 'unconfirmed-success'
+  ? "console.log('WACHA_RESULT_0'); process.stdin.resume(); process.stdin.on('end', () => process.exit(0));"
+  : `console.log('WACHA_INIT_OK'); console.log('WACHA_CLEAN_OK'); console.log('WACHA_RESULT_${mode === 'failure' ? 4 : 0}'); process.stdin.resume(); process.stdin.on('end', () => process.exit(${mode === 'failure' ? 4 : 0}));`}
 `, { mode: 0o700 });
   return { executable, actions, input };
 }
@@ -107,5 +110,12 @@ describe('起動プロセス（docker境界だけfixture）', () => {
       expect(actions.at(-1)?.slice(0, 2)).toEqual(['rm', '-f']);
       expect(JSON.stringify(result)).not.toMatch(/dummy-|raw|stderr/);
     } finally { clearTimeout(timer); }
+  });
+  it.each([['cleanup-failure', 6], ['unconfirmed-success', 8]] as const)('%s: 完了を確認できない場合は成功にしない', async (mode, code) => {
+    const fixture = await dockerFixture(mode);
+    const result = await runProbe({ sdkPath: temporary, binaryPath: resolve('package.json'), initOnly: true,
+      dockerCommand: fixture.executable });
+    expect(result.code).toBe(code);
+    expect(JSON.stringify(result)).not.toMatch(/dummy-|raw|stderr/);
   });
 });
