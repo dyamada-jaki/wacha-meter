@@ -27,12 +27,12 @@ describe('createSdkJwt', () => {
     expect(decodePart(parts[0])).toEqual({ alg: 'HS256', typ: 'JWT' });
   });
 
-  it('ペイロードは appKey と、発行時刻から 1800 秒後の exp / tokenExp を持つ', () => {
+  it('ペイロードは appKey と、発行時刻から 3600 秒後の exp / tokenExp を持つ', () => {
     expect(decodePart(parts[1])).toEqual({
       appKey: clientId,
       iat: issuedAt,
-      exp: issuedAt + 1800,
-      tokenExp: issuedAt + 1800,
+      exp: issuedAt + 3600,
+      tokenExp: issuedAt + 3600,
     });
   });
 
