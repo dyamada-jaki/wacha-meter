@@ -127,6 +127,16 @@ describe('classifyProbeRun: docker がコンテナを起動できなかったと
     });
   });
 
+  it('--init の tini が検証プログラムを実行できなかったときは、その行（パスと理由だけ）も理由として持つ', () => {
+    const tini = '[FATAL tini (6)] exec /opt/zoom-auth-probe/wacha-zoom-auth-probe failed: Permission denied';
+    const text = describeOutcome(
+      classifyProbeRun(run({ mode: 'init', exitCode: 126, stderr: `eyJ.secret-payload.x\n${tini}\n` })),
+    );
+    expect(text).toContain('Docker がコンテナを起動できませんでした（終了コード 126）');
+    expect(text).toContain(tini);
+    expect(text).not.toContain('secret-payload');
+  });
+
   it('結果行がなく終了コード 1 なら、これまでどおり結果行がないとして扱う', () => {
     expect(classifyProbeRun(run({ exitCode: 1, stderr }))).toEqual({ kind: 'probe_error', reason: 'no_result' });
   });
