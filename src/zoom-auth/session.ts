@@ -24,6 +24,8 @@ export interface ProbeSessionConfig {
   readonly initHostLimitSeconds: number;
   /** docker kill のあと、docker コマンドを強制終了するまでの猶予 */
   readonly killGraceMs: number;
+  /** docker ps / rm を待つ上限 */
+  readonly dockerCommandTimeoutMs: number;
   /** 利用者向けの進行表示（標準エラー） */
   readonly log: (line: string) => void;
 }
@@ -32,7 +34,11 @@ export class SetupError extends Error {}
 
 export interface ProbeSession {
   readonly runProbe: (request: ProbeRequest) => Promise<ProbeOutcome>;
+  /** SIGINT / SIGTERM を受けたときの停止と後始末。終了コード（130 / 143）を返す */
+  readonly interrupt: (signal: InterruptSignal) => Promise<number>;
 }
+
+export type InterruptSignal = 'SIGINT' | 'SIGTERM';
 
 export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
   const { childEnv, log } = config;
@@ -100,7 +106,11 @@ export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
     log(`残っていたコンテナを削除しました: ${containerName}`);
   }
 
-  return { runProbe };
+  function interrupt(signal: InterruptSignal): Promise<number> {
+    return Promise.reject(new Error(`未実装: ${signal}`));
+  }
+
+  return { runProbe, interrupt };
 }
 
 /**

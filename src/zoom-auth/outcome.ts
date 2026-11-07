@@ -10,6 +10,8 @@ export interface ProbeRun {
   /** 子プロセスの終了コード。シグナルで止まった場合は null。 */
   readonly exitCode: number | null;
   readonly stdout: string;
+  /** docker run の標準エラー。docker が起動に失敗したときの理由（docker: で始まる行）だけを使う */
+  readonly stderr?: string;
   /** ホスト側の上限時間を過ぎて止めたか。 */
   readonly hostTimedOut: boolean;
 }
@@ -19,7 +21,11 @@ export type ProbeOutcome =
   | { readonly kind: 'auth_failed'; readonly code: string }
   | { readonly kind: 'timed_out'; readonly by: 'sdk' | 'host' }
   | { readonly kind: 'sdk_error'; readonly stage: 'init' | 'auth' | 'cleanup'; readonly code: string }
-  | { readonly kind: 'probe_error'; readonly reason: 'no_result' | 'malformed_result' | 'inconsistent_result' };
+  | { readonly kind: 'probe_error'; readonly reason: 'no_result' | 'malformed_result' | 'inconsistent_result' }
+  /** docker がコンテナを起動できなかった（結果行がなく、終了コード 125 / 126 / 127） */
+  | { readonly kind: 'docker_failed'; readonly exitCode: number; readonly dockerLines: readonly string[] }
+  /** 検証プログラムは成功したが、コンテナを削除できなかった・残りを確認できなかった */
+  | { readonly kind: 'cleanup_failed'; readonly reason: 'remove_failed' | 'check_failed' };
 
 export const EXIT_CODES = {
   success: 0,
@@ -99,6 +105,9 @@ export function exitCodeFor(outcome: ProbeOutcome): number {
     case 'sdk_error':
     case 'probe_error':
       return EXIT_CODES.other;
+    case 'docker_failed':
+    case 'cleanup_failed':
+      throw new Error('未実装');
   }
 }
 
@@ -125,5 +134,8 @@ export function describeOutcome(outcome: ProbeOutcome): string {
       return `SDK の${STAGE_LABELS[outcome.stage]}に失敗しました（${outcome.code}）。`;
     case 'probe_error':
       return `検証プログラムの結果を確認できませんでした（${PROBE_ERROR_LABELS[outcome.reason]}）。成功とは扱いません。`;
+    case 'docker_failed':
+    case 'cleanup_failed':
+      throw new Error('未実装');
   }
 }

@@ -107,6 +107,48 @@ describe('classifyProbeRun', () => {
   });
 });
 
+describe('classifyProbeRun: docker がコンテナを起動できなかったとき', () => {
+  const stderr = [
+    'Unable to find image locally',
+    'eyJhbGciOiJIUzI1NiJ9.secret-payload.secret-signature',
+    'docker: Error response from daemon: pull access denied.',
+    "docker: Run 'docker run --help' for more information",
+    '',
+  ].join('\n');
+
+  it.each([125, 126, 127])('結果行がなく終了コード %i なら、docker: で始まる行だけを理由として持つ', (exitCode) => {
+    expect(classifyProbeRun(run({ mode: 'init', exitCode, stderr }))).toEqual({
+      kind: 'docker_failed',
+      exitCode,
+      dockerLines: [
+        'docker: Error response from daemon: pull access denied.',
+        "docker: Run 'docker run --help' for more information",
+      ],
+    });
+  });
+
+  it('結果行がなく終了コード 1 なら、これまでどおり結果行がないとして扱う', () => {
+    expect(classifyProbeRun(run({ exitCode: 1, stderr }))).toEqual({ kind: 'probe_error', reason: 'no_result' });
+  });
+
+  it('終了コード 125 でも結果行があれば、結果行で判定する', () => {
+    const stdout = line({ mode: 'auth', outcome: 'failed', stage: 'init', code: 'SDKERR_UNKNOWN' });
+    expect(classifyProbeRun(run({ exitCode: 125, stdout, stderr }))).toEqual({
+      kind: 'sdk_error',
+      stage: 'init',
+      code: 'SDKERR_UNKNOWN',
+    });
+  });
+
+  it('利用者向けの文言は終了コードと docker: の行を含み、それ以外の標準エラーを含まない', () => {
+    const text = describeOutcome(classifyProbeRun(run({ mode: 'init', exitCode: 126, stderr })));
+    expect(text).toContain('Docker がコンテナを起動できませんでした（終了コード 126）');
+    expect(text).toContain('docker: Error response from daemon: pull access denied.');
+    expect(text).not.toContain('secret-payload');
+    expect(text).not.toContain('Unable to find image');
+  });
+});
+
 describe('exitCodeFor', () => {
   it.each<[ProbeOutcome, number]>([
     [{ kind: 'succeeded', mode: 'init' }, 0],
@@ -116,6 +158,9 @@ describe('exitCodeFor', () => {
     [{ kind: 'timed_out', by: 'host' }, 4],
     [{ kind: 'sdk_error', stage: 'init', code: 'SDKERR_UNKNOWN' }, 1],
     [{ kind: 'probe_error', reason: 'no_result' }, 1],
+    [{ kind: 'docker_failed', exitCode: 125, dockerLines: [] }, 1],
+    [{ kind: 'cleanup_failed', reason: 'remove_failed' }, 1],
+    [{ kind: 'cleanup_failed', reason: 'check_failed' }, 1],
   ])('%j → %i', (outcome, code) => {
     expect(exitCodeFor(outcome)).toBe(code);
   });

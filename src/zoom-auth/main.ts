@@ -17,6 +17,7 @@ const session = createProbeSession({
   hostMarginSeconds: 15,
   initHostLimitSeconds: 30 + 15,
   killGraceMs: 5000,
+  dockerCommandTimeoutMs: 10000,
   log: (line) => console.error(line),
 });
 

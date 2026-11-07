@@ -35,6 +35,11 @@ describe('buildDockerRunArgs', () => {
     expect(valueAfter(args, '--name')).toEqual([base.containerName]);
   });
 
+  it('コンテナの PID 1 に init を置き、中断のシグナルで検証プログラムが止まるようにする', () => {
+    expect(args).toContain('--init');
+    expect(args.indexOf('--init')).toBeLessThan(args.indexOf(base.image));
+  });
+
   it('SDK とビルド結果は読み取り専用でマウントする', () => {
     const mounts = valueAfter(args, '-v');
     expect(mounts).toEqual([
