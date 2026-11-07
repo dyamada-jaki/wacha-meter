@@ -38,7 +38,7 @@
 | ARM64 Linux の試作用 Docker イメージ | ビルド・起動成功。Ubuntu 24.04、aarch64 |
 | C++ / GLib / libcurl | 小さな確認用プログラムのコンパイル・実行成功 |
 | PulseAudio | 起動と仮想出力デバイス作成成功。マイク・会議音声は未取得 |
-| GitHub CI | 未実行 |
+| GitHub CI | 初期準備 f0544d7 の [run 42380342483](https://github.com/dyamada-jaki/wacha-meter/actions/runs/42380342483) が成功 |
 | Zoom / Recall.ai / RTMS 接続 | 未実施 |
 | スコアの妥当性 | 未検証 |
 
@@ -54,7 +54,7 @@ Orca に `開発チーム起動（wacha-meter）` を無効で作成した。ID 
 
 ## 残件
 
-- 準備ファイルのコミット・push と Issue #1 の引き渡しはユーザー承認済み。
+- 準備ファイルは f0544d7 で main にコミット・push 済み。Issue #1 の開発チームを手動起動し、指示の受信とターン開始を確認した。
 - 今回は開発チームを手動起動する。定期実行の有効化は今回の承認対象に含めず、無効のままにする。
 - Linux ARM64 SDK 7.1.5.4434 はユーザーが取得済み。バイナリ形式とヘッダーの存在を確認した。SDK の初期化・認証は Issue #1 で開発チームが検証する。実認証にはローカルでの認証情報設定が必要。チャット共有や課金契約は要求していない。
 - `npm audit` は開発用の依存関係に moderate 10件を報告。根は minimatch の globparts amplification（GHSA-g3hv-75wg-m249）。通常の `npm audit fix` では解消せず、強制修正は ESLint などの互換性を変えるため適用していない。実行時依存は0件だが、Lint ツール側の既知の問題として保持し、修正版への更新を追跡する。
