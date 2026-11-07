@@ -4,6 +4,7 @@
 //
 // 有限時間で終わること: docker run は上限＋猶予で止める（run.ts）。docker kill / ps / rm は
 // 非同期に呼び、それぞれ上限を過ぎたら SIGKILL する。Docker が応答しなくても後始末は終わる。
+// 中断では、自分が起動した docker の子プロセスがすべて終わってから終了コードを返す。
 
 import { execFile } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
@@ -58,10 +59,15 @@ export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
   /** 中断したら docker run のクライアントを止める */
   const abort = new AbortController();
   let interruption: Promise<number> | undefined;
+  /** 実行中の docker run のクライアント（子プロセスの終了で settle する） */
+  let activeRun: Promise<RunResult> | undefined;
+  /** 実行中の docker kill / ps / rm（子プロセスの終了で resolve する） */
+  const pendingDocker = new Set<Promise<DockerResult>>();
 
   /** docker を非同期に呼ぶ。上限を過ぎたら SIGKILL する。失敗しても例外にしない */
   function docker(args: readonly string[], timeoutMs: number): Promise<DockerResult> {
-    return new Promise((resolveResult) => {
+    const pending = new Promise<DockerResult>((resolveResult) => {
+      // execFile のコールバックは子プロセスの終了（close）のあとに呼ばれる
       execFile(
         'docker',
         [...args],
@@ -69,6 +75,21 @@ export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
         (error, stdout) => resolveResult({ ok: error === null, stdout }),
       );
     });
+    pendingDocker.add(pending);
+    void pending.then(() => pendingDocker.delete(pending));
+    return pending;
+  }
+
+  /**
+   * 自分が起動した docker の子プロセスがすべて終わるまで待つ。
+   * 待っている間に通常の後始末が次の docker（rm・再確認）を呼ぶことがあるので、空になるまで繰り返す。
+   * どの docker も上限を過ぎたら SIGKILL されるので、有限時間で終わる。
+   */
+  async function waitForDockerChildren(): Promise<void> {
+    await activeRun?.catch(() => undefined);
+    while (pendingDocker.size > 0) {
+      await Promise.allSettled([...pendingDocker]);
+    }
   }
 
   async function runProbe(request: ProbeRequest): Promise<ProbeOutcome> {
@@ -91,7 +112,7 @@ export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
     activeContainer = containerName;
     let result: RunResult;
     try {
-      result = await runWithTimeout({
+      activeRun = runWithTimeout({
         command: 'docker',
         args: buildDockerRunArgs({
           image: config.image,
@@ -111,6 +132,7 @@ export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
         },
         abortSignal: abort.signal,
       });
+      result = await activeRun;
     } catch (error) {
       // 中断の後始末は interrupt が行い、終了コードも interrupt が決める
       if (interruption !== undefined) return waitForever();
@@ -180,6 +202,9 @@ export function createProbeSession(config: ProbeSessionConfig): ProbeSession {
           log('コンテナが残っている可能性があります。上の案内に従って確かめてください。');
         }
       }
+      // 通常の後始末や時間切れの docker kill が並行して動いていれば、それも終わるのを待つ。
+      // 終了コードを返したあとすぐ process.exit するため、待たないと子プロセスが残る
+      await waitForDockerChildren();
       return INTERRUPT_EXIT_CODES[signal];
     })();
     return interruption;

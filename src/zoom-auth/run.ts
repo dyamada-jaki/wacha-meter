@@ -13,7 +13,7 @@ export interface RunWithTimeoutOptions {
   /** onTimeout のあと、子プロセスを SIGKILL するまでの猶予 */
   readonly killGraceMs: number;
   readonly onTimeout: () => Promise<void>;
-  /** 中断用。abort されたら子プロセスを SIGKILL し、Promise は AbortError で reject する */
+  /** 中断用。abort されたら子プロセスを SIGKILL し、その終了を待って Promise を AbortError で reject する */
   readonly abortSignal?: AbortSignal;
 }
 
@@ -48,15 +48,20 @@ export function runWithTimeout(options: RunWithTimeoutOptions): Promise<RunResul
       options.onTimeout().catch(() => undefined);
     }, options.timeoutMs);
 
+    // 起動後のエラー（中断の AbortError など）は、子プロセスの終了（close）を待ってから伝える。
+    // 呼び出し側がすぐプロセスを終了しても、子が残らないようにするため
+    let failure: Error | undefined;
     child.on('error', (error) => {
       clearTimeout(timer);
       if (graceTimer) clearTimeout(graceTimer);
-      reject(error);
+      if (child.pid === undefined) reject(error);
+      else failure ??= error;
     });
     child.on('close', (code) => {
       clearTimeout(timer);
       if (graceTimer) clearTimeout(graceTimer);
-      resolve({ exitCode: code, stdout, stderr, timedOut });
+      if (failure !== undefined) reject(failure);
+      else resolve({ exitCode: code, stdout, stderr, timedOut });
     });
   });
 }
