@@ -1,0 +1,3 @@
+policy:
+  # 人間が名前を指定したときだけ使う（副作用が大きいため）
+  allow_implicit_invocation: false

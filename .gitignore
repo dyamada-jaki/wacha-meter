@@ -1,0 +1,13 @@
+node_modules
+dist
+*.tsbuildinfo
+.env
+.DS_Store
+*.log
+e2e-artifacts
+playwright-report
+test-results
+reports
+mutation-artifacts
+.stryker-tmp
+stryker-setup-*.js

@@ -1,0 +1,28 @@
+# 既定（Web アプリ）の CI の例。使うときは .github/workflows/ci.yml にコピーする。
+# Node の版は .nvmrc から読むので、アプリの雛形と一緒に .nvmrc を作っておく。
+# E2E やミューテーションを導入したら、ジョブを足す（重いジョブには timeout-minutes を付ける）。
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: テスト・型チェック・Lint・ビルド
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npm run test
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build

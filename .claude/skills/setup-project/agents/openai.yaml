@@ -1,0 +1,3 @@
+policy:
+  # 「セットアップして」などの最初の依頼でも使えるよう、名前を指定しなくても呼べるようにする
+  allow_implicit_invocation: true
