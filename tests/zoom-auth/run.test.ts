@@ -1,10 +1,11 @@
 // docker の代わりに node の子プロセスを使う（CI に Docker と SDK が無いため）。
 // 実物の docker / SDK との接続は、手元の実 SDK 実行で確かめる（PR に記録）。
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { runWithTimeout } from '../../src/zoom-auth/run.js';
+import { processAlive } from './fake-docker.js';
 
 const env = { PATH: process.env.PATH ?? '' };
 
@@ -82,5 +83,32 @@ describe('runWithTimeout', () => {
       },
     });
     expect(result.timedOut).toBe(true);
+  });
+
+  it('中断（abort）で reject するときは、子プロセスの終了を待ってから reject する', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'wacha-run-abort-'));
+    try {
+      const pidFile = join(dir, 'child.pid');
+      const abort = new AbortController();
+      const running = runWithTimeout({
+        ...node(`require("fs").writeFileSync(${JSON.stringify(pidFile)}, String(process.pid)); setInterval(() => {}, 1000)`),
+        timeoutMs: 10000,
+        killGraceMs: 300,
+        onTimeout: async () => undefined,
+        abortSignal: abort.signal,
+      });
+      const started = Date.now();
+      while (!existsSync(pidFile) || readFileSync(pidFile, 'utf8') === '') {
+        if (Date.now() - started > 5000) throw new Error('子プロセスが起動しませんでした');
+        await new Promise((r) => setTimeout(r, 20));
+      }
+      const pid = Number(readFileSync(pidFile, 'utf8'));
+      abort.abort();
+      await expect(running).rejects.toMatchObject({ name: 'AbortError' });
+      // reject した時点で、子プロセスは終了して回収されている（待たずに確かめる）
+      expect(processAlive(pid)).toBe(false);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
