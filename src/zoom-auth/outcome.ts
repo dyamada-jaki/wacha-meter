@@ -19,7 +19,11 @@ export interface ProbeRun {
 export type ProbeOutcome =
   | { readonly kind: 'succeeded'; readonly mode: ProbeMode }
   | { readonly kind: 'auth_failed'; readonly code: string }
-  | { readonly kind: 'timed_out'; readonly by: 'sdk' | 'host' }
+  /**
+   * probe: 検証プログラムの待ち時間（--timeout）の間に SDK から結果が返らなかった。
+   * sdk: SDK が AUTHRET_OVERTIME を返した。host: ホスト側の上限で止めた。
+   */
+  | { readonly kind: 'timed_out'; readonly by: 'probe' | 'sdk' | 'host' }
   | { readonly kind: 'sdk_error'; readonly stage: 'init' | 'auth' | 'cleanup'; readonly code: string }
   | { readonly kind: 'probe_error'; readonly reason: 'no_result' | 'malformed_result' | 'inconsistent_result' }
   /** docker がコンテナ・検証プログラムを起動できなかった（結果行がなく、終了コード 125 / 126 / 127） */
@@ -66,7 +70,7 @@ export function classifyProbeRun(run: ProbeRun): ProbeOutcome {
         ? { kind: 'succeeded', mode: run.mode }
         : { kind: 'probe_error', reason: 'inconsistent_result' };
     case 'timeout':
-      return { kind: 'timed_out', by: 'sdk' };
+      return { kind: 'timed_out', by: result.code === undefined ? 'probe' : 'sdk' };
     case 'failed': {
       const stage = result.stage ?? 'init';
       const code = result.code ?? 'UNKNOWN';
@@ -151,6 +155,12 @@ const PROBE_ERROR_LABELS = {
   inconsistent_result: '結果行と終了コードが食い違っています',
 } as const;
 
+const TIMEOUT_LABELS = {
+  probe: 'SDK から認証の結果が返りませんでした（検証プログラムの待ち時間 --timeout を超えました）。',
+  sdk: 'SDK が認証の時間切れ（AUTHRET_OVERTIME）を返しました。ネットワークを確認してください。',
+  host: '検証プログラムが時間切れになったため停止しました（ホスト側の上限を超えました）。',
+} as const;
+
 export function describeOutcome(outcome: ProbeOutcome): string {
   switch (outcome.kind) {
     case 'succeeded':
@@ -160,9 +170,7 @@ export function describeOutcome(outcome: ProbeOutcome): string {
     case 'auth_failed':
       return `SDK の認証に失敗しました（${outcome.code}）。認証情報と、アプリで Meeting SDK が有効かを確認してください。`;
     case 'timed_out':
-      return outcome.by === 'sdk'
-        ? 'SDK の認証が時間切れになりました（SDK 側の待ち時間を超えました）。ネットワークを確認してください。'
-        : '検証プログラムが時間切れになったため停止しました（ホスト側の上限を超えました）。';
+      return TIMEOUT_LABELS[outcome.by];
     case 'sdk_error':
       return `SDK の${STAGE_LABELS[outcome.stage]}に失敗しました（${outcome.code}）。`;
     case 'probe_error':

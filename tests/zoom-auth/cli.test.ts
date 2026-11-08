@@ -57,7 +57,7 @@ describe('runCli auth', () => {
   });
 
   it('--timeout と --offline を検証プログラムへ渡す', async () => {
-    const { deps, requests } = setup(creds, { kind: 'timed_out', by: 'sdk' });
+    const { deps, requests } = setup(creds, { kind: 'timed_out', by: 'probe' });
     expect(await runCli(['auth', '--timeout', '5', '--offline'], deps)).toBe(4);
     expect(requests[0]).toMatchObject({ authTimeoutSeconds: 5, offline: true });
   });
