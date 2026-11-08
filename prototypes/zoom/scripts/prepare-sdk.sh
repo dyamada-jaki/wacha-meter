@@ -1,12 +1,14 @@
 #!/usr/bin/env bash
-# 取得済みの Linux ARM64 Meeting SDK を、SHA-256 を照合してから Git 管理外へ展開する。
+# 取得済みの Meeting SDK（Linux-all 形式、7.2.1.5860）の SHA-256 を照合してから、
+# arm64 部分だけを Git 管理外へ展開する。x86_64 部分とアーカイブ内のスクリプトは使わない。
 # 使い方: prototypes/zoom/scripts/prepare-sdk.sh <SDK アーカイブ> [展開先]
-#   展開先の既定: .local/zoom-sdk/7.1.5.4434（.gitignore 済み）
+#   展開先の既定: .local/zoom-sdk/7.2.1.5860（.gitignore 済み）
 set -euo pipefail
 
-EXPECTED_SHA256=384d2e522b0d3e2650bb5e6f5201e1e5e5d88151a5f8808a2b8832c97c4fcb19
-archive=${1:?SDK アーカイブのパスを指定してください（例: ~/Downloads/zoom-meeting-sdk-linux_arm64-7.1.5.4434.tar.xz）}
-dest=${2:-.local/zoom-sdk/7.1.5.4434}
+EXPECTED_SHA256=ddf8daffb053a7bd4702ac9f6f7de2ab6cb58a537eb3448df18a499ac7e62750
+ARM64_MEMBER=zoom-sdk-linux-7.2.1.5860/arm64
+archive=${1:?SDK アーカイブのパスを指定してください（例: ~/Downloads/zoom-meeting-sdk-linux-7.2.1.5860.tar.xz）}
+dest=${2:-.local/zoom-sdk/7.2.1.5860}
 
 actual=$(shasum -a 256 "$archive" 2>/dev/null || sha256sum "$archive")
 actual=${actual%% *}
@@ -19,6 +21,4 @@ if [[ -e "$dest/libmeetingsdk.so" ]]; then
   echo "展開済みです: $dest"
   exit 0
 fi
-mkdir -p "$dest"
-tar -xJf "$archive" -C "$dest"
-echo "展開しました: $dest"
+exec "$(dirname "$0")/extract-sdk-arm64.sh" "$archive" "$dest" "$ARM64_MEMBER"

@@ -9,7 +9,7 @@ import { createProbeSession, SetupError } from './session.js';
 
 const env = process.env;
 const session = createProbeSession({
-  sdkDir: resolve(env.WACHA_ZOOM_SDK_DIR ?? '.local/zoom-sdk/7.1.5.4434'),
+  sdkDir: resolve(env.WACHA_ZOOM_SDK_DIR ?? '.local/zoom-sdk/7.2.1.5860'),
   probeBuildDir: resolve(env.WACHA_ZOOM_PROBE_BUILD_DIR ?? '.local/zoom-auth-probe/build'),
   image: env.WACHA_ZOOM_IMAGE ?? DEFAULT_IMAGE,
   containerPrefix: env.WACHA_ZOOM_CONTAINER_PREFIX ?? DEFAULT_CONTAINER_PREFIX,

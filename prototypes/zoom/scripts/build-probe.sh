@@ -7,7 +7,7 @@ set -euo pipefail
 
 repo=$(cd "$(dirname "$0")/../../.." && pwd)
 image=${WACHA_ZOOM_IMAGE:-wacha-meter-zoom-dev:local}
-sdk_dir=$(cd "${WACHA_ZOOM_SDK_DIR:-$repo/.local/zoom-sdk/7.1.5.4434}" && pwd)
+sdk_dir=$(cd "${WACHA_ZOOM_SDK_DIR:-$repo/.local/zoom-sdk/7.2.1.5860}" && pwd)
 build_dir=${WACHA_ZOOM_PROBE_BUILD_DIR:-$repo/.local/zoom-auth-probe/build}
 prefix=${WACHA_ZOOM_CONTAINER_PREFIX:-wacha-meter-zoom-auth}
 mkdir -p "$build_dir"
