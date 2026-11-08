@@ -12,22 +12,22 @@
 オンライン会議の観測・採点アプリ。無料を基本とし、Zoom の有料アカウントは候補に含めてよい。その他の追加課金を前提にしない。他者主催の会議も対象とする。SDK の用途・審査条件が未確認なので方式は採用保留。手元の PC で動く会議ボットとローカル解析を、[初期調査](docs/research/feasibility.md) に基づいて検討する。
 
 - 準備済みの共通基盤: Node.js 24 + TypeScript（strict）+ Vitest + ESLint
-- 実行環境: 共通コードはローカルの Node.js。CI は Ubuntu + Node.js。接続試作は今の Mac の OrbStack / Docker 上の ARM64 Ubuntu 24.04。SDK は未導入（prototypes/zoom/README.md）
-- React・Vite・会議 SDK・課金 API はまだ導入していない。C++ / Docker のビルド準備は prototypes/zoom/Dockerfile に置く。Linux ARM64 SDK は取得済みで、実行可否は Issue #1 から検証する
+- 実行環境: 共通コードはローカルの Node.js。CI は Ubuntu + Node.js。接続試作は今の Mac の OrbStack / Docker 上の ARM64 Ubuntu 24.04。SDK 本体は Git 管理外の `.local/` に展開して使う（prototypes/zoom/README.md）
+- React・Vite・課金 API はまだ導入していない。会議 SDK は試作（prototypes/zoom）でのみ使い、src/ のアプリには組み込んでいない。C++ / Docker のビルド準備は prototypes/zoom/Dockerfile に置く。Linux ARM64 SDK 7.2.1.5860（Linux-all バンドルの arm64）の初期化・認証の検証プログラムは prototypes/zoom/auth-probe（Issue #1）
 
 ## コマンド
 - `npm ci` — 開発依存をインストール
-- `npm run test:setup` — 初期準備用。テスト0件を許可する。機能検証の証拠にしない
-- `npm run test` — 機能実装後のテスト。テスト0件では失敗する
+- `npm run test` — テスト（Vitest）。テスト0件では失敗する
 - `npm run typecheck` — 型チェック
 - `npm run lint` — Lint
 - `npm run build` — TypeScript のビルド
-- 最初の機能 Issue で、下表と CI の `test:setup` を `test` に切り替える
+- `npm run zoom:init` / `npm run zoom:auth` — Zoom SDK の初期化・認証の手元確認（Docker と Git 管理外の SDK が必要。CI では実行しない。prototypes/zoom/README.md）
 
 ## ディレクトリ構成
 ```
-src/           TypeScript のコード（現時点は空のエントリーポイント）
-prototypes/zoom/  Zoom 接続試作の環境と準備手順
+src/           TypeScript のコード（zoom-auth/: SDK 初期化・認証の検証コマンド）
+tests/         Vitest のテスト
+prototypes/zoom/  Zoom 接続試作の環境・手順と C++ の検証プログラム（auth-probe/）
 docs/
   spec.md      仕様（正）
   research/    調査結果と提案（採用決定とは区別）
@@ -44,7 +44,7 @@ docs/
 | 項目 | 値 |
 |---|---|
 | リポジトリ | `dyamada-jaki/wacha-meter`（既定ブランチ `main`） |
-| 確認コマンド | `npm run test:setup`（準備段階のみ。最初の機能 Issue で `npm run test` に変更） / `npm run typecheck` / `npm run lint` / `npm run build` |
+| 確認コマンド | `npm run test` / `npm run typecheck` / `npm run lint` / `npm run build` |
 | テスト先行 | する（機能追加・振る舞いの変更では、テストを先に書いて失敗を確かめてから作る。→ testing.md 1章） |
 | E2E | なし（導入したらコマンドを書く） |
 | ミューテーション | なし（導入したらコマンドと対象を書く） |
