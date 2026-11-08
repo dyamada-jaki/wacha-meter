@@ -10,7 +10,7 @@ import {
 const base: DockerRunOptions = {
   image: 'wacha-meter-zoom-dev:issue-1-claude',
   containerName: 'wacha-meter-zoom-auth-issue-1-claude-abc123',
-  sdkDir: '/work/.local/zoom-sdk/7.1.5.4434',
+  sdkDir: '/work/.local/zoom-sdk/7.2.1.5860',
   probeBuildDir: '/work/.local/zoom-auth-probe/build',
   mode: 'auth',
   authTimeoutSeconds: 30,
@@ -43,7 +43,7 @@ describe('buildDockerRunArgs', () => {
   it('SDK とビルド結果は読み取り専用でマウントする', () => {
     const mounts = valueAfter(args, '-v');
     expect(mounts).toEqual([
-      '/work/.local/zoom-sdk/7.1.5.4434:/opt/zoom-sdk:ro',
+      '/work/.local/zoom-sdk/7.2.1.5860:/opt/zoom-sdk:ro',
       '/work/.local/zoom-auth-probe/build:/opt/zoom-auth-probe:ro',
     ]);
   });
