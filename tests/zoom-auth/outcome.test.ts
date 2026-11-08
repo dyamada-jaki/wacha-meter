@@ -66,8 +66,13 @@ describe('classifyProbeRun', () => {
     });
   });
 
-  it('SDK 側の待ち時間切れは、sdk による時間切れ', () => {
+  it('コードの無い時間切れは、検証プログラムが待ちきった（SDK から結果が返らなかった）時間切れ', () => {
     const stdout = line({ mode: 'auth', outcome: 'timeout', stage: 'auth' });
+    expect(classifyProbeRun(run({ stdout, exitCode: 4 }))).toEqual({ kind: 'timed_out', by: 'probe' });
+  });
+
+  it('SDK が AUTHRET_OVERTIME を返した時間切れは、sdk による時間切れ', () => {
+    const stdout = line({ mode: 'auth', outcome: 'timeout', stage: 'auth', code: 'AUTHRET_OVERTIME' });
     expect(classifyProbeRun(run({ stdout, exitCode: 4 }))).toEqual({ kind: 'timed_out', by: 'sdk' });
   });
 
@@ -164,6 +169,7 @@ describe('exitCodeFor', () => {
     [{ kind: 'succeeded', mode: 'init' }, 0],
     [{ kind: 'succeeded', mode: 'auth' }, 0],
     [{ kind: 'auth_failed', code: 'AUTHRET_KEYORSECRETWRONG' }, 3],
+    [{ kind: 'timed_out', by: 'probe' }, 4],
     [{ kind: 'timed_out', by: 'sdk' }, 4],
     [{ kind: 'timed_out', by: 'host' }, 4],
     [{ kind: 'sdk_error', stage: 'init', code: 'SDKERR_UNKNOWN' }, 1],
@@ -188,5 +194,16 @@ describe('describeOutcome', () => {
     expect(texts[0]).toContain('成功');
     expect(texts[1]).toContain('失敗');
     expect(texts[2]).toContain('時間切れ');
+  });
+
+  it('時間切れは、誰が待ちきったかで文言を分ける（SDK のコードがあるときだけ SDK 側の時間切れと書く）', () => {
+    const probe = describeOutcome({ kind: 'timed_out', by: 'probe' });
+    const sdk = describeOutcome({ kind: 'timed_out', by: 'sdk' });
+    const host = describeOutcome({ kind: 'timed_out', by: 'host' });
+    expect(new Set([probe, sdk, host]).size).toBe(3);
+    expect(probe).toContain('SDK から認証の結果が返りませんでした');
+    expect(probe).toContain('--timeout');
+    expect(probe).not.toContain('SDK 側');
+    expect(sdk).toContain('AUTHRET_OVERTIME');
   });
 });
