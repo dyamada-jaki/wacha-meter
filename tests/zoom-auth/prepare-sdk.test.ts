@@ -3,7 +3,7 @@
 // 小さなアーカイブを作って確かめる。SHA-256 の照合は本物のアーカイブだけが通るので、
 // 照合後の展開・ELF の確認は extract-sdk-arm64.sh を直接呼んで確かめる。
 import { spawnSync } from 'node:child_process';
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, lstatSync, mkdirSync, mkdtempSync, readdirSync, readlinkSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -28,8 +28,8 @@ function elfHeader(machine: number): Buffer {
 const AARCH64 = 183;
 const X86_64 = 62;
 
-/** Linux-all 形式のアーカイブを作る。arm64 側の libmeetingsdk.so の中身を選べる */
-function makeArchive(arm64Library: Buffer | undefined): string {
+/** Linux-all 形式のアーカイブを作る。arm64 側の libmeetingsdk.so の中身と、追加のシンボリックリンク（arm64/ からの相対パス → リンク先）を選べる */
+function makeArchive(arm64Library: Buffer | undefined, links: Record<string, string> = {}): string {
   const src = join(work, 'src');
   const arm = join(src, TOP, 'arm64');
   const x86 = join(src, TOP, 'x86_64');
@@ -40,6 +40,7 @@ function makeArchive(arm64Library: Buffer | undefined): string {
   writeFileSync(join(arm, 'h/zoom_sdk.h'), '// header\n');
   writeFileSync(join(arm, 'libglib2/lib/libglib-2.0.so.0.7200.4'), '');
   symlinkSync('libglib-2.0.so.0.7200.4', join(arm, 'libglib2/lib/libglib-2.0.so.0'));
+  for (const [path, target] of Object.entries(links)) symlinkSync(target, join(arm, path));
   writeFileSync(join(x86, 'libmeetingsdk.so'), elfHeader(X86_64));
   writeFileSync(join(src, TOP, 'version.txt'), 'v0.0.0.1\n');
   const archive = join(work, 'sdk.tar.xz');
@@ -79,6 +80,47 @@ describe('SDK の arm64 部分の展開（extract-sdk-arm64.sh）', () => {
     const result = extract(makeArchive(undefined), dest);
     expect(result.status).not.toBe(0);
     expect(existsSync(dest)).toBe(false);
+  });
+
+  it('失敗したとき、処理前からある空の祖先ディレクトリは消さない（今回作った親だけを消す）', () => {
+    const keep = join(work, 'keep');
+    mkdirSync(keep);
+    const dest = join(keep, 'new-parent/sdk');
+    const result = extract(makeArchive(elfHeader(X86_64)), dest);
+    expect(result.status).not.toBe(0);
+    expect(existsSync(join(keep, 'new-parent'))).toBe(false);
+    expect(lstatSync(keep).isDirectory()).toBe(true);
+    expect(lstatSync(work).isDirectory()).toBe(true);
+  });
+
+  it('展開先の外を指す絶対パスのシンボリックリンクがあれば失敗し、展開先と一時フォルダを残さない', () => {
+    const outside = join(work, 'outside.txt');
+    writeFileSync(outside, 'x');
+    const parent = join(work, 'out');
+    mkdirSync(parent);
+    const dest = join(parent, 'sdk');
+    const result = extract(makeArchive(elfHeader(AARCH64), { 'h/evil': outside }), dest);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('h/evil');
+    expect(existsSync(dest)).toBe(false);
+    expect(readdirSync(parent)).toEqual([]);
+  });
+
+  it('.. で展開先の外に出る相対パスのシンボリックリンクがあれば失敗し、展開先を作らない', () => {
+    const dest = join(work, 'out/sdk');
+    const result = extract(makeArchive(elfHeader(AARCH64), { 'h/evil': '../../outside.txt' }), dest);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('h/evil');
+    expect(existsSync(dest)).toBe(false);
+  });
+
+  it('展開先の中を指す相対パスのシンボリックリンク（.. で上がっても中に留まるもの）は許す', () => {
+    const dest = join(work, 'out/sdk');
+    const result = extract(makeArchive(elfHeader(AARCH64), { 'h/lib': '../libmeetingsdk.so', 'h/self': './zoom_sdk.h' }), dest);
+    expect(result.status).toBe(0);
+    expect(readlinkSync(join(dest, 'h/lib'))).toBe('../libmeetingsdk.so');
+    expect(readlinkSync(join(dest, 'h/self'))).toBe('./zoom_sdk.h');
+    expect(readlinkSync(join(dest, 'libglib2/lib/libglib-2.0.so.0'))).toBe('libglib-2.0.so.0.7200.4');
   });
 
   it('展開先がすでにあれば、上書きせずに失敗する', () => {
