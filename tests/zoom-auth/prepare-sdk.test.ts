@@ -93,6 +93,37 @@ describe('SDK の arm64 部分の展開（extract-sdk-arm64.sh）', () => {
     expect(lstatSync(work).isDirectory()).toBe(true);
   });
 
+  it.each(['new/../sdk', 'new/./sdk'])('まだ無いフォルダに続く . や .. を含む展開先（keep/%s）にも展開できる', (rel) => {
+    const keep = join(work, 'keep');
+    mkdirSync(keep);
+    const dest = `${keep}/${rel}`; // join は .. を正規化してしまうので、文字列のまま渡す
+    const result = extract(makeArchive(elfHeader(AARCH64)), dest);
+    expect(result.stderr).toBe('');
+    expect(result.status).toBe(0);
+    expect(existsSync(join(dest, 'libmeetingsdk.so'))).toBe(true);
+    expect(readdirSync(keep).filter((name) => name.startsWith('.extract-sdk'))).toEqual([]);
+  });
+
+  it.each(['new/../sdk', 'new/./sdk'])('keep/%s への展開に失敗したとき、既存の keep/ は残し、今回作った new/ は消す', (rel) => {
+    const keep = join(work, 'keep');
+    mkdirSync(keep);
+    const result = extract(makeArchive(elfHeader(X86_64)), `${keep}/${rel}`);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('AArch64');
+    expect(lstatSync(keep).isDirectory()).toBe(true);
+    expect(readdirSync(keep)).toEqual([]);
+  });
+
+  it('親を作ったあとで展開先が既存のものと分かったら（keep/new/../sdk が keep/sdk）、上書きせずに失敗し、作った new/ を消す', () => {
+    const keep = join(work, 'keep');
+    mkdirSync(join(keep, 'sdk'), { recursive: true });
+    writeFileSync(join(keep, 'sdk/keep'), 'x');
+    const result = extract(makeArchive(elfHeader(AARCH64)), `${keep}/new/../sdk`);
+    expect(result.status).not.toBe(0);
+    expect(readdirSync(join(keep, 'sdk'))).toEqual(['keep']);
+    expect(readdirSync(keep)).toEqual(['sdk']);
+  });
+
   it('展開先の外を指す絶対パスのシンボリックリンクがあれば失敗し、展開先と一時フォルダを残さない', () => {
     const outside = join(work, 'outside.txt');
     writeFileSync(outside, 'x');
@@ -114,13 +145,33 @@ describe('SDK の arm64 部分の展開（extract-sdk-arm64.sh）', () => {
     expect(existsSync(dest)).toBe(false);
   });
 
-  it('展開先の中を指す相対パスのシンボリックリンク（.. で上がっても中に留まるもの）は許す', () => {
+  it('.. を含まない相対パスのシンボリックリンク（SDK に同梱の形）は許す', () => {
     const dest = join(work, 'out/sdk');
-    const result = extract(makeArchive(elfHeader(AARCH64), { 'h/lib': '../libmeetingsdk.so', 'h/self': './zoom_sdk.h' }), dest);
+    const result = extract(makeArchive(elfHeader(AARCH64), { 'h/self': './zoom_sdk.h', 'h/sub': 'sub-dir/x.h' }), dest);
     expect(result.status).toBe(0);
-    expect(readlinkSync(join(dest, 'h/lib'))).toBe('../libmeetingsdk.so');
     expect(readlinkSync(join(dest, 'h/self'))).toBe('./zoom_sdk.h');
+    expect(readlinkSync(join(dest, 'h/sub'))).toBe('sub-dir/x.h');
     expect(readlinkSync(join(dest, 'libglib2/lib/libglib-2.0.so.0'))).toBe('libglib-2.0.so.0.7200.4');
+  });
+
+  it('リンク先に .. を1つでも含むシンボリックリンクは、展開先の中に留まる形でも失敗する', () => {
+    const dest = join(work, 'out/sdk');
+    const result = extract(makeArchive(elfHeader(AARCH64), { 'h/lib': '../libmeetingsdk.so' }), dest);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('h/lib');
+    expect(existsSync(dest)).toBe(false);
+  });
+
+  it('途中のリンクを経由して外に出るシンボリックリンクの連鎖（q -> . と evil -> q/../outside.txt）があれば失敗する', () => {
+    const parent = join(work, 'out');
+    mkdirSync(parent);
+    writeFileSync(join(parent, 'outside.txt'), 'x'); // sdk/evil が実際に解決される先（sdk の兄弟）
+    const dest = join(parent, 'sdk');
+    const result = extract(makeArchive(elfHeader(AARCH64), { q: '.', evil: 'q/../outside.txt' }), dest);
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain('evil');
+    expect(existsSync(dest)).toBe(false);
+    expect(readdirSync(parent)).toEqual(['outside.txt']);
   });
 
   it('展開先がすでにあれば、上書きせずに失敗する', () => {
