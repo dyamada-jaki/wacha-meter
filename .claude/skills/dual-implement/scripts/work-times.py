@@ -32,7 +32,7 @@ def orca(*args):
         exe = "/Applications/Orca.app/Contents/Resources/bin/orca"
     else:
         exe = "orca"
-    return json.loads(run([exe, *args, "--json"]))["result"]
+    return json.loads(run([exe, *args, "--json", "--full"]))["result"]
 
 
 def ts(s):

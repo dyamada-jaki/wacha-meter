@@ -39,3 +39,5 @@ PO はプロダクトの判断を spec.md に書き、ADR は書かない。ADR 
 
 | 番号 | 題名 | 状態 | 日時 | 関連 Issue |
 |---|---|---|---|---|
+| [0001](0001-zoom-sdk試作はDocker上のC++とTypeScriptに分ける.md) | Zoom SDK の試作は Docker 上の小さな C++ で動かし、設定・JWT・判定・プロセス管理は TypeScript でテストする | 採用 | 2026-11-09 00:00 JST | #1 |
+| [0002](0002-zoom-sdkは7.2.1.5860のarm64を使う.md) | Zoom Meeting SDK は 7.2.1.5860（Linux-all バンドルの arm64）を使い、JWT の有効期間は 3600 秒にする | 採用 | 2026-11-09 00:00 JST | #1 |
