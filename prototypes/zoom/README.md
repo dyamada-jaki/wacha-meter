@@ -8,7 +8,7 @@
 
 2026-11-08: ユーザーが Zoom App Marketplace の「Linux-all」バンドル `zoom-meeting-sdk-linux-7.2.1.5860.tar.xz`（`version.txt` は v7.2.1.5860）を取得し、Downloads に保存した。7.1.5.4434 の arm64 単独のアーカイブと違い、`zoom-sdk-linux-7.2.1.5860/` の下に `arm64/` と `x86_64/` が分かれている。`arm64/` だけを使う。
 
-SHA-256: `ddf8daffb053a7bd4702ac9f6f7de2ab6cb58a537eb3448df18a499ac7e62750`（受領したファイルを識別するための値。提供元の署名検証ではない）。`prepare-sdk.sh` がこの値を照合し、`arm64/` の中身だけを `.local/zoom-sdk/7.2.1.5860/` の直下に展開する（`libmeetingsdk.so` が 64 ビット ELF / AArch64 であることを確かめてから置く）。アーカイブ内のスクリプトは実行しない。
+SHA-256: `ddf8daffb053a7bd4702ac9f6f7de2ab6cb58a537eb3448df18a499ac7e62750`（受領したファイルを識別するための値。提供元の署名検証ではない）。`prepare-sdk.sh` がこの値を照合し、`arm64/` の中身だけを `.local/zoom-sdk/7.2.1.5860/` の直下に展開する（`libmeetingsdk.so` が 64 ビット ELF / AArch64 であること、展開先の外を指すシンボリックリンク（絶対パス、または `..` で外に出るもの）が無いことを確かめてから置く。失敗したときは展開先を作らず、今回作った親フォルダだけを消す）。アーカイブ内のスクリプトは実行しない。
 
 7.1.5.4434 から替えた理由:
 
