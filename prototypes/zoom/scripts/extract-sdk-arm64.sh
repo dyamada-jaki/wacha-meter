@@ -4,8 +4,8 @@
 #   例: ... sdk.tar.xz .local/zoom-sdk/7.2.1.5860 zoom-sdk-linux-7.2.1.5860/arm64
 # SHA-256 の照合は呼び出し元（prepare-sdk.sh）で済ませる。アーカイブ内のスクリプトは実行しない。
 # いったん隣の一時フォルダへ展開し、libmeetingsdk.so が 64 ビット ELF / AArch64 であることを
-# 確かめてから展開先へ移す。展開先の外を指すシンボリックリンク（絶対パス、または .. で外に出るもの）が
-# あれば拒否する。確かめられなければ展開先を作らず、今回作った親フォルダだけを消す（処理前からあるものには触れない）。
+# 確かめてから展開先へ移す。リンク先が絶対パス、または .. を含むシンボリックリンクがあれば拒否する
+# （展開先の外を指すものを、連鎖も含めて防ぐ）。確かめられなければ展開先を作らず、今回作った親フォルダだけを消す（処理前からあるものには触れない）。
 set -euo pipefail
 
 archive=${1:?アーカイブのパスを指定してください}
@@ -21,19 +21,9 @@ fi
 # member の深さ（例: a/arm64 → 2）だけ先頭のフォルダを取り除く
 depth=$(awk -F/ '{print NF}' <<<"$member")
 parent=$(dirname "$dest")
-# 今回作る親フォルダを、浅いものから順に記録する（後始末では逆順に1つずつ rmdir する）
-created_dirs=()
-missing=()
-dir=$parent
-while [[ ! -d "$dir" ]]; do
-  missing=("$dir" "${missing[@]+"${missing[@]}"}")
-  dir=$(dirname "$dir")
-done
-for dir in "${missing[@]+"${missing[@]}"}"; do
-  mkdir "$dir"
-  created_dirs+=("$dir")
-done
+# 後始末に使う変数を先に用意し、親を作る前に trap を登録する（親を作っている途中の失敗も戻す）
 staging=""
+created_dirs=()
 cleanup() {
   if [[ -n "$staging" ]]; then rm -rf "$staging"; fi
   local i
@@ -42,6 +32,25 @@ cleanup() {
   done
 }
 trap cleanup EXIT
+# 無い親フォルダを、浅いものから順に作る。new/.. や new/. のように、前の mkdir で存在するように
+# なるものもあるので、作る直前に確かめ直し、実際に作ったものだけを記録する（後始末では逆順に1つずつ rmdir する）
+missing=()
+dir=$parent
+while [[ ! -d "$dir" ]]; do
+  missing=("$dir" "${missing[@]+"${missing[@]}"}")
+  dir=$(dirname "$dir")
+done
+for dir in "${missing[@]+"${missing[@]}"}"; do
+  if [[ ! -d "$dir" ]]; then
+    mkdir "$dir"
+    created_dirs+=("$dir")
+  fi
+done
+# 親を作ると、作る前は辿れなかった展開先（例: keep/new/../sdk = keep/sdk）が既存と分かることがある
+if [[ -e "$dest" || -L "$dest" ]]; then
+  echo "展開先がすでにあります。上書きしません: $dest" >&2
+  exit 1
+fi
 staging=$(mktemp -d "$parent/.extract-sdk.XXXXXX")
 
 if ! tar -xJf "$archive" -C "$staging" --strip-components="$depth" "$member" 2>/dev/null; then
@@ -49,29 +58,18 @@ if ! tar -xJf "$archive" -C "$staging" --strip-components="$depth" "$member" 2>/
   exit 1
 fi
 
-# シンボリックリンクのリンク先を、リンクの置き場所から文字列として辿り、展開先の外に出ないことを確かめる。
-# 絶対パスは拒否する。SDK に同梱の相対リンク（例: libglib-2.0.so.0 → libglib-2.0.so.0.7200.4）は許す。
+# シンボリックリンクは、リンク先が .. を含まない相対パスのものだけを許す（絶対パス、または .. を1つでも含めば拒否）。
+# .. を使わない相対のリンク先は、リンクの置き場所のフォルダから下にしか進めない。途中にリンクがあっても、
+# そのリンク先も同じ規則で置き場所より下にしか行かないので、どう連鎖しても展開先の外には出られない。
+# 7.2.1.5860 の arm64/ にあるリンクは libglib2/lib/ の同じフォルダ内を指す12個だけで、.. を含むものは無い。
 escaping_links=$(cd "$staging" && find . -type l | while IFS= read -r link; do
   target=$(readlink "$link")
-  if ! awk -v base="$(dirname "${link#./}")" -v target="$target" 'BEGIN {
-    if (substr(target, 1, 1) == "/") exit 1
-    depth = 0
-    if (base != ".") {
-      n = split(base, parts, "/")
-      for (i = 1; i <= n; i++) if (parts[i] != "" && parts[i] != ".") depth++
-    }
-    n = split(target, parts, "/")
-    for (i = 1; i <= n; i++) {
-      if (parts[i] == "" || parts[i] == ".") continue
-      if (parts[i] == "..") { depth--; if (depth < 0) exit 1 } else depth++
-    }
-    exit 0
-  }'; then
+  if [[ "$target" == /* || "/$target/" == */../* ]]; then
     printf '%s\n' "${link#./}"
   fi
 done)
 if [[ -n "$escaping_links" ]]; then
-  echo "展開先の外を指すシンボリックリンクがあります。展開しません:" >&2
+  echo "リンク先が絶対パス、または .. を含むシンボリックリンクがあります（展開先の外を指しうる）。展開しません:" >&2
   sed 's/^/  /' <<<"$escaping_links" >&2
   exit 1
 fi
