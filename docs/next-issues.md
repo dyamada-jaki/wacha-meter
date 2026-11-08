@@ -1,6 +1,6 @@
 # 現在地と次に切る Issue
 
-最終更新: 2026-11-07。PO が管理する。
+最終更新: 2026-11-08。PO が管理する。
 
 ## 現在地
 
@@ -12,15 +12,19 @@
 | CI | 初期準備 f0544d7 の [GitHub Actions](https://github.com/dyamada-jaki/wacha-meter/actions/runs/42380342483) が成功。テストは準備用の0件許容で、機能検証ではない |
 | 開発プロセス | ラベル・PO 登録済み。起動係はこのリポジトリ専用に作成、無効のまま |
 | main 取り込み | 初期準備を f0544d7 でコミットし、origin/main へ push 済み |
-| 実機検証 | Zoom などへの接続、観測、採点、通知すべて未実施 |
-| 区切り1 | 範囲承認済み：今の Mac で Zoom に独立した参加者として入室し、許可後の音声取得まで。SDK 取得済み、SDK 実行・会議接続は未検証で未達 |
+| 実機検証 | PR #2 で 7.1.5.4434 の初期化・後始末を確認。実認証はコールバックが来ず成功未確認。7.2.1.5860 に切替中。会議接続・観測・採点・通知は未実施 |
+| 区切り1 | 未達。Issue #1 は初期化・認証の段階で、入室・音声取得は後続 |
 | 接続試作の環境 | ARM64 Ubuntu 24.04 の Docker イメージを構築。C++ / GLib / libcurl のコンパイル・実行、PulseAudio と仮想音声デバイスの動作を確認。Zoom SDK はまだ含まない |
 
 ## 登録済み Issue
 
-[Issue #1: Zoom Meeting SDK を ARM64 Linux に組み込み、初期化・認証を確認する](https://github.com/dyamada-jaki/wacha-meter/issues/1) は「着手中」。ユーザー承認に基づき開発チームを手動起動し、`/dual-implement 1` の受信・ターン開始を確認した。実装は開発チームが担当し、最初に計画を提示する。起動時のフォルダ信頼確認を処理して同じ端末で続行した。チームの重複起動はしていない。
+[Issue #1: Zoom Meeting SDK を ARM64 Linux に組み込み、初期化・認証を確認する](https://github.com/dyamada-jaki/wacha-meter/issues/1) は「着手中」。[PR #2](https://github.com/dyamada-jaki/wacha-meter/pull/2) の初回 PO 判断は実認証成功の確認待ち。本物の認証情報でコールバックが来ない症状を受け、人間が SDK 7.2.1.5860 への切替と同じ Issue 内での成功確認を選択した。開発チームは切替修正を進め、修正後の再確認と PO の再受け入れ確認を行う。過去 head のテスト・CI 成功を、新 SDK の成功確認に流用しない。
 
-ユーザー取得の Linux ARM64 SDK 7.1.5.4434 はアーカイブ内容と実バイナリの AArch64 を確認済み。[受領記録](../prototypes/zoom/README.md)。認証情報のローカル設定と SDK の実動作はまだ確認していない。
+検証対象は `zoom-meeting-sdk-linux-7.2.1.5860.tar.xz` の `zoom-sdk-linux-7.2.1.5860/arm64/`。PO が受領ファイルの SHA-256 `ddf8daffb053a7bd4702ac9f6f7de2ab6cb58a537eb3448df18a499ac7e62750` と、arm64 ライブラリが AArch64 ELF（e_machine=183）であることを確認した。同梱の x86_64 は使わない。ハッシュは受領ファイルの識別用で、提供元の署名検証ではない。
+
+7.1.5.4434 では本物の認証情報で `SDKAuth` のコールバックが来ず、`GetAuthResult()` は `AUTHRET_NONE` のまま（開発チームの最新申し送りでは5回再現）。[調査コメント](https://github.com/dyamada-jaki/wacha-meter/pull/2#issuecomment-6718418602) によると、従来の「SDK の時間切れ」という表示は検証プログラム側の待機期限であり、区別する修正も PR #2 に入っている。これらは開発チームの確認記録で、PO は再実行していない。
+
+開発チームは [Zoom フォーラムの同症状報告](https://devforum.zoom.us/t/linux-arm64-meeting-sdk-7-1-0-7-1-5-sdkauth-never-calls-back-7-0-5-arm64-and-7-1-5-x86-64-work/146972) を切替の根拠としている。PO のブラウズでは本文を取得できなかったため、フォーラムの解消報告はチームからの情報として扱う。本プロジェクトで 7.2.1.5860 の認証成功を確認したとは扱わない。
 
 ## 後続 Issue の候補（未登録）
 
@@ -55,4 +59,4 @@
 - 起動係: `開発チーム起動（wacha-meter）`、ID `6ede30fc-0db9-4b31-bab1-18decf0b0005`。無効で作成。有効化はユーザー確認後。
 - 開発依存の監査: minimatch を原因とする moderate 10件。通常更新では未解消。詳細は [準備記録](research/setup-status.md)。
 
-- 実認証確認の依存事項: 開発用アプリの認証情報のローカル設定。設定手順を実装してからユーザーに案内する。設定前でも計画・実装・認証不要の検証は進める。SDK は受領済み。Client Secret のチャット共有は不要。
+- 実認証確認の残件: PR #2 の 7.2.1.5860 対応後の再確認と、本物の認証情報による成功・後始末の記録。人間は同じ Issue 内での確認を選択済み。Client Secret のチャット共有は不要。
