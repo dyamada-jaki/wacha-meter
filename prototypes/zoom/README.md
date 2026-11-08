@@ -4,9 +4,30 @@
 
 ## SDK の受領と引き継ぎ
 
+### 7.2.1.5860（現在使う版）
+
+2026-11-08: ユーザーが Zoom App Marketplace の「Linux-all」バンドル `zoom-meeting-sdk-linux-7.2.1.5860.tar.xz`（`version.txt` は v7.2.1.5860）を取得し、Downloads に保存した。7.1.5.4434 の arm64 単独のアーカイブと違い、`zoom-sdk-linux-7.2.1.5860/` の下に `arm64/` と `x86_64/` が分かれている。`arm64/` だけを使う。
+
+SHA-256: `ddf8daffb053a7bd4702ac9f6f7de2ab6cb58a537eb3448df18a499ac7e62750`（受領したファイルを識別するための値。提供元の署名検証ではない）。`prepare-sdk.sh` がこの値を照合し、`arm64/` の中身だけを `.local/zoom-sdk/7.2.1.5860/` の直下に展開する（`libmeetingsdk.so` が 64 ビット ELF / AArch64 であることを確かめてから置く）。アーカイブ内のスクリプトは実行しない。
+
+7.1.5.4434 から替えた理由:
+
+- 実測（2026-11-08）: 7.1.5.4434 では、本物の認証情報で `SDKAuth` が SDKERR_SUCCESS を返したあと、120 秒待っても `onAuthenticationReturn` が呼ばれなかった（ダミーの認証情報では `AUTHRET_JWTTOKENWRONG` がすぐ返った）
+- 出典（Zoom 開発者フォーラム「[Linux arm64 Meeting SDK 7.1.0 / 7.1.5: SDKAuth never calls back](https://devforum.zoom.us/t/linux-arm64-meeting-sdk-7-1-0-7-1-5-sdkauth-never-calls-back-7-0-5-arm64-and-7-1-5-x86-64-work/146972)」）: 同じ症状が Linux arm64 の 7.1.0 / 7.1.5.4434 だけで起き、7.2.1.5860 の arm64 で解消したとの報告。7.2.1 の変更履歴には「ARM64 Linux で GLib と組み合わせたときの hang」の修正が挙がっている。この不具合が上の症状の原因だというのはフォーラムの報告に基づく推測で、SDK の内部までは確かめていない
+- 実測（2026-11-08）: 7.2.1.5860 では、同じ本物の認証情報で認証が成功した（下の確認結果）
+
+7.2.1.5860 で増えた・変わった点（今回の検証プログラムに関係するもの）:
+
+- `arm64/libglib2/` に GLib 2.72.4 が同梱されている。`libmeetingsdk.so` の RUNPATH は `$$ORIGIN` などビルド環境のパスで、コンテナでは効かない。検証プログラムは今までどおり Ubuntu 24.04 のシステムの GLib にリンクしており、それで初期化・認証が成功した。同梱の GLib は使っていない
+- `IZoomSDKRendererDelegate` に純粋仮想関数 `onShareCursorDataReceived` が増えた（`h/rawdata/rawdata_renderer_interface.h`）。検証プログラムはこのインターフェースを使わないので影響はない。音声・映像の受信を作るときに実装が必要
+- ヘッダーの増減: `meeting_backstage_interface.h`・`meeting_remote_ctrl_interface.h`・`rawdata/rawdata_video_mixer_interface.h` が増え、`meeting_smart_summary_interface.h` がなくなった。`zoom_sdk_def.h` に `SDKERR_SEND_TOO_MUCH_DATA_IN_SINGLE_TIME` などが増えた
+- `libmeetingsdk.so` の依存（NEEDED）は libglib-2.0・libstdc++・libc など。必要な glibc は 2.35 まで
+
+### 7.1.5.4434（以前の版）
+
 2026-11-07: ユーザーが `zoom-meeting-sdk-linux_arm64-7.1.5.4434.tar.xz` を取得。Downloads に保存されている。アーカイブ内の `libmeetingsdk.so` が 64 ビット ELF / AArch64（e_machine=183）で、初期化・認証・音声関連のヘッダーを含むことを確認した。SDK のリンク・初期化・認証はまだ行っていない。
 
-SHA-256: `384d2e522b0d3e2650bb5e6f5201e1e5e5d88151a5f8808a2b8832c97c4fcb19`（受領したファイルを識別するための値。提供元の署名検証ではない）。SDK 本体は Git 管理外に置く。
+SHA-256: `384d2e522b0d3e2650bb5e6f5201e1e5e5d88151a5f8808a2b8832c97c4fcb19`。展開物は `.local/zoom-sdk/7.1.5.4434/` に残してあるが、準備スクリプト・検証コマンドの既定は 7.2.1.5860 に替えた。7.1.5.4434 を使い直すときは、展開済みのフォルダを `WACHA_ZOOM_SDK_DIR` で指定する。SDK 本体は Git 管理外に置く。
 
 開発チームの最初の作業は [Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1)。準備の main 反映後に着手条件を確認する。PO が担当したのは環境準備とファイル確認までで、初期化・認証プログラムは開発チームが実装する。
 
@@ -41,13 +62,16 @@ docker run --rm --platform linux/arm64 wacha-meter-zoom-dev:local uname -m
 - Docker がコンテナや検証プログラムを起動できなかったとき（結果行がなく終了コード 125 / 126 / 127）は、`docker:` で始まる行と、init（tini）が検証プログラムを実行できなかった行だけを表示する。それ以外の標準エラーは出さない
 - 待ち時間: SDK 側は既定 30 秒（`--timeout` で 1〜600 秒）。ホスト側はその 15 秒後に `docker kill` し、さらに 5 秒で止まらなければ docker コマンドを強制終了する。`docker kill` は 5 秒、後始末の `docker ps` / `rm` はそれぞれ 10 秒を上限とし、Docker が応答しなくても有限時間で終わる。`init` のホスト側の上限は 45 秒
 - 終了コード: 0 成功 / 1 その他（SDK の初期化・呼び出し・後始末の失敗、結果を読めない）/ 2 設定・使い方の誤り（検証プログラムは起動しない）/ 3 認証失敗 / 4 時間切れ（SDK から結果が返らず検証プログラムの待ち時間を超えた／SDK が `AUTHRET_OVERTIME` を返した／ホスト側の上限）
-- JWT の有効期間は 1 時間。公式資料の最小は 30 分（1800 秒）だが、SDK 7.1.5.4434 は exp − iat = 1800 秒の JWT を `SDKAuth` の呼び出し時点で `SDKERR_INTERNAL_ERROR` として拒否した（1801 秒・3600 秒は受け付けた。オフラインのコンテナで確認）。iat はホストで作り約1秒後にコンテナで渡すため、SDK は自身の時計で「残りの有効期間が 1800 秒以上か」を確かめているとみられる
+- JWT の有効期間は 1 時間。公式資料の最小は 30 分（1800 秒）だが、短い JWT は `SDKAuth` の呼び出し時点で拒否された（いずれも `--offline`、ダミーの認証情報、各1回の実測）
+  - 7.1.5.4434（2026-11-07）: exp − iat = 1800 秒を `SDKERR_INTERNAL_ERROR` で拒否。1801 秒・3600 秒は受け付けた
+  - 7.2.1.5860（2026-11-08）: 1800 秒・1801 秒を `SDKERR_INVALID_PARAMETER` で拒否。1802・1805・1830・1900・2400・3600 秒は受け付けた
+  - iat はホストで作り、1〜2 秒後にコンテナで渡す。SDK は自身の時計で「残りの有効期間が 1800 秒以上か」を確かめているとみられる（推測）。境界が 1 秒ずれたのが版の違いか起動の遅れかは区別していない
 
 ### 手順
 
 ```sh
-# 1. SDK を Git 管理外へ展開（SHA-256 を照合する）
-prototypes/zoom/scripts/prepare-sdk.sh ~/Downloads/zoom-meeting-sdk-linux_arm64-7.1.5.4434.tar.xz
+# 1. SDK の arm64 部分を Git 管理外へ展開（SHA-256 と AArch64 の ELF を確かめる）
+prototypes/zoom/scripts/prepare-sdk.sh ~/Downloads/zoom-meeting-sdk-linux-7.2.1.5860.tar.xz
 
 # 2. ビルド環境のイメージ（SDK・秘密は入らない）
 docker build --platform linux/arm64 -t wacha-meter-zoom-dev:local prototypes/zoom
@@ -81,7 +105,22 @@ npm run zoom:auth -- --offline         # ネットワークを切って時間切
 
 未設定・空・空白や改行を含む値は、検証プログラムを起動せずに終了コード 2 で知らせる（値は表示しない）。
 
-### 確認結果（2026-11-07、Issue #1）
+### 確認結果（7.2.1.5860、2026-11-08、Issue #1）
+
+環境: macOS（Apple Silicon）、OrbStack の linux/arm64、Ubuntu 24.04 イメージ（システムの GLib 2.80）、Node.js 24.14.0、Meeting SDK 7.2.1.5860（Linux-all の arm64）。対象コミットは `b015f2b`（以降のコミットはコメント・文書だけの変更）、調査用の変更なし。
+
+| 確認 | 結果 |
+|---|---|
+| 準備スクリプトでの展開 | SHA-256 一致、`arm64/` の中身だけを展開、`libmeetingsdk.so` は 64 ビット ELF / AArch64 |
+| 実 SDK へのリンク | 成功（`libmeetingsdk.so` とシステムの GLib にリンク） |
+| `zoom:init` | InitSDK・CleanUPSDK とも SDKERR_SUCCESS、終了コード 0 |
+| ダミーの ID/Secret（乱数）で `zoom:auth`（Zoom への送信 1 回） | `AUTHRET_JWTTOKENWRONG`、終了コード 3、約 2 秒で終了 |
+| **本物の認証情報で `zoom:auth`（Zoom への送信 1 回）** | **成功**（「SDK の認証に成功しました（会議には参加していません）」）、終了コード 0、約 1 秒で終了 |
+| 実行後のコンテナ | すべての実行で残っていない |
+
+会議への参加・音声の取得・録音はしていない。
+
+### 確認結果（7.1.5.4434、2026-11-07〜08、Issue #1）
 
 環境: macOS（Apple Silicon）、OrbStack の linux/arm64、Ubuntu 24.04 イメージ、Node.js 24.14.0、Meeting SDK 7.1.5.4434。
 
@@ -96,7 +135,7 @@ npm run zoom:auth -- --offline         # ネットワークを切って時間切
 | 実行後のコンテナ | すべての実行で残っていない |
 | 中断（PR #2 のレビュー対応、`auth --offline --timeout 600` の実行中） | プロセスグループへの SIGINT・Node だけへの SIGINT で終了コード 130、Node だけへの SIGTERM で 143。いずれも約 0.2 秒で終了し、コンテナは残っていない |
 | 実行権限のない検証プログラム（`init`） | 「Docker がコンテナを起動できませんでした（終了コード 126）」と tini の `exec ... failed: Permission denied` の行を表示、終了コード 1 |
-| **実認証の成功** | **未確認**。本物の認証情報では、SDKAuth は SDKERR_SUCCESS を返すが、120 秒待っても `onAuthenticationReturn` が呼ばれない（2026-11-08。SDK からの `AUTHRET_OVERTIME` ではない）。Zoom（zoom.us）への HTTPS のやり取りは完了しており、DNS・TLS・時刻・書き込み先に問題は見つかっていない |
+| 実認証 | 成功しなかった。本物の認証情報では、SDKAuth は SDKERR_SUCCESS を返すが、120 秒待っても `onAuthenticationReturn` が呼ばれない（2026-11-08。SDK からの `AUTHRET_OVERTIME` ではない）。Zoom（zoom.us）への HTTPS のやり取りは完了しており、DNS・TLS・時刻・書き込み先に問題は見つかっていない。上記のフォーラムの報告を受けて 7.2.1.5860 に替えた |
 
 SDK の初期化・認証の成功は、ボット用途の採用や外部会議への参加の承認を意味しない（[初期調査](../../docs/research/feasibility.md)）。
 
@@ -107,7 +146,7 @@ SDK の入手にはログインと開発用アプリ1件の登録が必要。こ
 1. [Zoom App Marketplace](https://marketplace.zoom.us/) にログインする。無料アカウントから始める。
 2. Developers / Build App から General App を作成する。作成する名前は「わちゃメーター（開発用）」。
 3. Features → Embed で Meeting SDK を有効にする。
-4. Linux の **ARM64（aarch64）** 向け Meeting SDK をダウンロードする。x86_64 版や Video SDK は選ばない。
+4. Linux の Meeting SDK をダウンロードする。7.2.1.5860 では arm64 と x86_64 をまとめた「Linux-all」バンドルを選ぶ（中の `arm64/` だけを使う）。Video SDK は選ばない。
 5. ダウンロードしたファイルはそのまま Downloads に置き、ファイル名をエージェントへ伝える。ARM64 が見つからなければ、表示された選択肢を伝える。
 
 まだ Client Secret をチャットに貼る必要はない。認証情報は、接続プログラムの構成を決めてから Git 管理外のローカルファイルに設定する。契約や規約への同意が表示された場合はユーザー本人が内容を確認する。
