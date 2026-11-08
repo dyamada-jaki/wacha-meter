@@ -1,6 +1,12 @@
 # わちゃメーター：実現方法の初期調査
 
-調査日: 2026-11-07。公式資料による机上調査。実会議接続・SDK 実行・採点精度は未検証。推奨や指標は提案であり、採用済みの仕様ではない。
+調査日: 2026-11-07。公式資料による机上調査。初期調査時点では実会議接続・SDK 実行・採点精度は未検証。推奨や指標は提案であり、採用済みの仕様ではない。
+
+## 試作の進捗（2026-11-09 追記）
+
+Issue #1 は完了し、PR #2 を main へ取り込み済み。開発用 General App の認証情報を使い、Linux-all の SDK 7.2.1.5860（arm64）で初期化・認証成功・後始末を確認した。会議には参加しておらず、外部会議の用途・参加条件や音声取得の可否は未解決。詳細は [Issue #1 レポート](../issue-reports/issue-1.md)。
+
+試作の C++ / TypeScript の分担と SDK の版は [ADR 0001](../decisions/0001-zoom-sdk試作はDocker上のC++とTypeScriptに分ける.md)・[ADR 0002](../decisions/0002-zoom-sdkは7.2.1.5860のarm64を使う.md) で採用済み。以下の外部資料の調査日は 2026-11-07 のままであり、この追記では再調査していない。
 
 ## ユーザー共有のライセンス
 
@@ -135,7 +141,7 @@ Meeting SDK の自作ボットを手元の PC で動かす案は、冒頭の用�
 
 ## 開発環境の準備
 
-共通処理の検証用に Node.js 24・TypeScript（strict）・Vitest・ESLint を用意した。会議 SDK、Web UI、解析モデル、課金 API は未導入。TypeScript の利用は会議参加プロセスを C++ や別言語で作る選択を妨げない。
+共通処理の検証用に Node.js 24・TypeScript（strict）・Vitest・ESLint を用意した。Issue #1 で会議 SDK の初期化・認証の試作を導入済み。SDK 呼び出しは Docker 上の C++、周辺の設定・判定は TypeScript に分けた。Web UI、解析モデル、課金 API は未導入。
 
 開発依存の目的: TypeScript は型チェックとビルド、Vitest は仕様決定後のテスト、ESLint・@eslint/js・typescript-eslint は Lint、@types/node は Node.js の型定義。アプリの実行時依存はまだない。
 
@@ -153,12 +159,12 @@ Meeting SDK の自作ボットを手元の PC で動かす案は、冒頭の用�
 
 この作業端末は Apple Silicon（arm64）の macOS。Docker のサーバーは linux/aarch64 で稼働していることを確認した。Xcode の選択パスは CommandLineTools。これらは SDK 自体の動作確認ではない。
 
-- Linux SDK + Docker: ヘッドレスなボットの検証候補だが、冒頭の用途制限により採用保留。公式の2026年10月26日リリース記録には ARM64 Linux（Ubuntu 24.04）の入室修正があり、ARM64 対応の SDK を選んで検証する。SDK の入手・リンク・音声デバイスの構成は未確認。[公式リリース一覧](https://godevelopers.zoom.us/changelog/?platform=linux&product=meeting-sdk)
+- Linux SDK + Docker: ヘッドレスなボットの検証候補だが、冒頭の用途制限により採用保留。公式の2026年10月26日リリース記録には ARM64 Linux（Ubuntu 24.04）の入室修正があり、ARM64 対応の SDK を選んで検証する。初期調査時は SDK 未検証だったが、Issue #1 で 7.2.1.5860 の入手・ビルド・初期化・実認証を確認した。仮想音声デバイスの準備は済み、会議音声の取得は未確認。[公式リリース一覧](https://godevelopers.zoom.us/changelog/?platform=linux&product=meeting-sdk)
 - macOS SDK: 比較候補。公式文書には、ホストのローカル録音許可に基づく生音声取得と、参加者別音声コールバックが記載されている。録音経由とライブ配信経由では要件が異なり、後者には有料ホスト条件がある。今回まず検討するのは録音権限による取得。電話参加者は参加者別コールバックの対象外という制約がある。[macOS raw data](https://developers.zoom.us/docs/meeting-sdk/macos/custom-ui/advanced-features/raw-data/)
 
-検証時は参加者の許可を得た短いテスト会議を使い、初回は音声内容を保存せず受信量・匿名化した話者識別子など最低限の観測で確認する案。保存条件は実施前に確定する。実際の SDK の取得や Zoom アプリ登録はまだ行っていない。
+検証時は参加者の許可を得た短いテスト会議を使い、初回は音声内容を保存せず受信量・匿名化した話者識別子など最低限の観測で確認する案。保存条件は実施前に確定する。SDK の取得と開発用 General App の準備は Issue #1 で済んだが、会議での検証は未実施。
 
-ユーザーから他者主催の会議への参加が必要と確認できた。契約のまとまりは不明のため外部アカウント主催を含めて検討する。Client Secret、会議パスコードなどを会話に貼る必要はない。用途・審査条件を確認できたら、アプリ登録と SDK 入手の手順を具体化する。
+ユーザーから他者主催の会議への参加が必要と確認できた。契約のまとまりは不明のため外部アカウント主催を含めて検討する。Client Secret、会議パスコードなどを会話に貼る必要はない。次は開発用アプリを外部会議でテストするための用途・審査条件を具体化する。
 
 ## Zoom へ確認する文面の下書き（未送信）
 

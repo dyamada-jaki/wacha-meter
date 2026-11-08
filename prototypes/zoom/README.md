@@ -25,11 +25,11 @@ SHA-256: `ddf8daffb053a7bd4702ac9f6f7de2ab6cb58a537eb3448df18a499ac7e62750`（�
 
 ### 7.1.5.4434（以前の版）
 
-2026-11-07: ユーザーが `zoom-meeting-sdk-linux_arm64-7.1.5.4434.tar.xz` を取得。Downloads に保存されている。アーカイブ内の `libmeetingsdk.so` が 64 ビット ELF / AArch64（e_machine=183）で、初期化・認証・音声関連のヘッダーを含むことを確認した。SDK のリンク・初期化・認証はまだ行っていない。
+2026-11-07: ユーザーが `zoom-meeting-sdk-linux_arm64-7.1.5.4434.tar.xz` を取得。Downloads に保存されている。アーカイブ内の `libmeetingsdk.so` が 64 ビット ELF / AArch64（e_machine=183）で、初期化・認証・音声関連のヘッダーを含むことを確認した。この受領時点では SDK のリンク・初期化・認証は未実施だった。その後、初期化は成功したが実認証のコールバックが返らず、7.2.1.5860 に切り替えた。
 
-SHA-256: `384d2e522b0d3e2650bb5e6f5201e1e5e5d88151a5f8808a2b8832c97c4fcb19`。展開物は `.local/zoom-sdk/7.1.5.4434/` に残してあるが、準備スクリプト・検証コマンドの既定は 7.2.1.5860 に替えた。7.1.5.4434 を使い直すときは、展開済みのフォルダを `WACHA_ZOOM_SDK_DIR` で指定する。SDK 本体は Git 管理外に置く。
+SHA-256: `384d2e522b0d3e2650bb5e6f5201e1e5e5d88151a5f8808a2b8832c97c4fcb19`（以前の受領ファイルの記録）。現在は [ADR 0002](../../docs/decisions/0002-zoom-sdkは7.2.1.5860のarm64を使う.md) に従い、7.2.1.5860 の arm64 を使う。
 
-開発チームの最初の作業は [Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1)。準備の main 反映後に着手条件を確認する。PO が担当したのは環境準備とファイル確認までで、初期化・認証プログラムは開発チームが実装する。
+[Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1) は完了し、初期化・認証プログラムを PR #2 で main へ取り込み済み。main の `.local/` に SDK 7.2.1 の展開物と検証プログラムのビルド結果を保持している（Git 管理外）。検証と後片付けの記録は [Issue レポート](../../docs/issue-reports/issue-1.md)。
 
 ## 用意した環境
 
@@ -40,7 +40,7 @@ docker build --platform linux/arm64 -t wacha-meter-zoom-dev:local prototypes/zoo
 docker run --rm --platform linux/arm64 wacha-meter-zoom-dev:local uname -m
 ```
 
-上の確認はビルド環境の確認であり、Zoom SDK のビルド・動作確認ではない。SDK 入手後、実際のライブラリ依存と API の版を確かめて接続プログラムを作る。Rosetta / x86_64 エミュレーションは使わない。
+上の確認はビルド環境の確認であり、Zoom SDK のビルド・動作確認ではない。SDK を使った初期化・認証の確認は後述の検証プログラムで行う。Rosetta / x86_64 エミュレーションは使わない。
 
 2026-11-07 の実機確認結果: Docker イメージのビルド成功、実行環境と C++ コンパイラーが aarch64、GLib / libcurl を使う小さな C++ プログラムのコンパイル・実行成功、PulseAudio の起動と仮想出力デバイスの作成成功。Mac のマイクや会議音声は取得していない。
 
