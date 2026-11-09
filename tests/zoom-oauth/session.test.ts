@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
-import { createServer } from 'node:http';
+import { createServer, request, type Server } from 'node:http';
 import { connect } from 'node:net';
+import { networkInterfaces } from 'node:os';
 import { afterEach, describe, expect, it } from 'vitest';
 import { runOAuth, type OAuthOptions } from '../../src/zoom-oauth/session.js';
 
@@ -10,7 +11,13 @@ const ACCESS = 'test-access-token';
 const REFRESH = 'test-refresh-token';
 const success = () => Response.json({ access_token: ACCESS, refresh_token: REFRESH, token_type: 'bearer' });
 const controllers: AbortController[] = [];
-afterEach(() => { for (const controller of controllers.splice(0)) controller.abort(); });
+const tokenServers: Server[] = [];
+afterEach(async () => {
+  for (const controller of controllers.splice(0)) controller.abort();
+  await Promise.all(tokenServers.splice(0).map((server) => new Promise<void>((resolve) => {
+    server.close(() => resolve()); server.closeAllConnections();
+  })));
+});
 
 function callback(auth: URL, params: Record<string, string> = {}) {
   const url = new URL(auth.searchParams.get('redirect_uri')!);
@@ -27,14 +34,14 @@ function fixture(overrides: Partial<OAuthOptions> = {}) {
   let init: RequestInit | undefined;
   let exchanges = 0;
   let browserResponse = '';
+  let navigation = Promise.resolve();
+  const defaultBrowser: OAuthOptions['openBrowser'] = async (url) => {
+    browserResponse = await (await fetch(callback(new URL(url)))).text();
+  };
   const options: OAuthOptions = {
     clientId: PUBLIC_ID,
     timeoutMs: 2000,
     signal: controller.signal,
-    openBrowser: async (url) => {
-      authorization = new URL(url);
-      browserResponse = await (await fetch(callback(authorization))).text();
-    },
     fetch: async (url, request) => {
       exchanges++;
       requestUrl = String(url);
@@ -43,9 +50,15 @@ function fixture(overrides: Partial<OAuthOptions> = {}) {
       return success();
     },
     ...overrides,
+    openBrowser: (url, signal) => {
+      authorization = new URL(url);
+      navigation = Promise.resolve().then(() => (overrides.openBrowser ?? defaultBrowser)(url, signal));
+      return navigation;
+    },
   };
   return { options, controller, auth: () => authorization, exchanges: () => exchanges,
-    request: () => ({ url: requestUrl, body: new URLSearchParams(body), init }), response: () => browserResponse };
+    request: () => ({ url: requestUrl, body: new URLSearchParams(body), init }), response: () => browserResponse,
+    navigation: () => navigation };
 }
 
 async function expectClosed(url: string) {
@@ -63,6 +76,7 @@ describe('OAuth: 実loopback と外部API境界の結合', () => {
   it('Public ID・S256・stateで認可し、同じredirectとverifierで一度だけ交換する', async () => {
     const f = fixture();
     expect(await runOAuth(f.options)).toEqual({ kind: 'success' });
+    await f.navigation();
     const auth = f.auth()!;
     expect(auth.origin + auth.pathname).toBe('https://zoom.us/oauth/authorize');
     expect(auth.searchParams.get('client_id')).toBe(PUBLIC_ID);
@@ -88,6 +102,7 @@ describe('OAuth: 実loopback と外部API境界の結合', () => {
     expect(auth.searchParams.get('code_challenge')).toBe(createHash('sha256').update(verifier).digest('base64url'));
     expect([...request.body.keys()].sort()).toEqual(['client_id', 'code', 'code_verifier', 'grant_type', 'redirect_uri']);
     expect(f.exchanges()).toBe(1);
+    expect(f.response()).toContain('認可応答を受け取りました');
     for (const secret of [PUBLIC_ID, CODE, ACCESS, REFRESH, verifier, auth.searchParams.get('state')!]) {
       expect(f.response()).not.toContain(secret);
     }
@@ -116,8 +131,16 @@ describe('OAuth: 実loopback と外部API境界の結合', () => {
         if (variant === 'empty-code') url.searchParams.set('code', '');
         if (variant === 'duplicate-code') url.searchParams.append('code', CODE);
         if (variant === 'both') url.searchParams.set('error', 'access_denied');
-        await fetch(url, { ...(variant === 'post' ? { method: 'POST' } : {}),
-          ...(variant === 'host' ? { headers: { host: 'evil.example' } } : {}) });
+        if (variant === 'host') {
+          // fetchはHostを上書きするため、実際に不正Hostを送れるHTTPクライアントを使う。
+          await new Promise<void>((resolve, reject) => {
+            request(url, { headers: { host: 'evil.example' } }, (response) => {
+              response.resume(); response.once('end', resolve);
+            }).on('error', reject).end();
+          });
+        } else {
+          await fetch(url, variant === 'post' ? { method: 'POST' } : {});
+        }
       } });
       expect(await runOAuth(f.options)).toEqual({ kind: 'failure' });
       expect(redirect).not.toBe('');
@@ -131,15 +154,19 @@ describe('OAuth: 実loopback と外部API境界の結合', () => {
     ['invalid_request', { kind: 'failure', errorCode: 'invalid_request' }],
     ['secret https://example.com', { kind: 'failure' }],
   ])('callbackのerror=%sを安全に分類する', async (error, expected) => {
+    let responseText = '';
     const f = fixture({ openBrowser: async (value) => {
       const url = callback(new URL(value));
       url.searchParams.delete('code');
       url.searchParams.set('error', error);
       url.searchParams.set('error_description', ACCESS);
       const response = await fetch(url);
-      expect(await response.text()).not.toContain(ACCESS);
+      responseText = await response.text();
     } });
     expect(await runOAuth(f.options)).toEqual(expected);
+    await f.navigation();
+    expect(responseText).toContain('認可は完了しませんでした');
+    expect(responseText).not.toContain(ACCESS);
     expect(f.exchanges()).toBe(0);
   });
 
@@ -178,11 +205,43 @@ describe('OAuth: 実loopback と外部API境界の結合', () => {
     await expectClosed(f.auth()!.searchParams.get('redirect_uri')!);
   });
 
+  it.each(['complete', 'body-stalls'] as const)('実HTTPクライアントでトークン応答を読み取る（%s）', async (mode) => {
+    let receivedBody = '';
+    let receivedAuthorization: string | undefined;
+    let resolveClosed!: () => void;
+    const closed = new Promise<void>((resolve) => { resolveClosed = resolve; });
+    const tokenServer = createServer((request, response) => {
+      request.setEncoding('utf8');
+      request.on('data', (chunk: string) => { receivedBody += chunk; });
+      receivedAuthorization = request.headers.authorization;
+      response.once('close', resolveClosed);
+      request.once('end', () => {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        if (mode === 'body-stalls') response.write('{"access_token":');
+        else response.end(JSON.stringify({ access_token: ACCESS, token_type: 'bearer' }));
+      });
+    });
+    tokenServers.push(tokenServer);
+    await new Promise<void>((resolve) => tokenServer.listen(0, '127.0.0.1', resolve));
+    const address = tokenServer.address();
+    if (!address || typeof address === 'string') throw new Error('token fakeの待受に失敗');
+    const f = fixture({ tokenTimeoutMs: 100,
+      fetch: async (_url, init) => fetch(`http://127.0.0.1:${address.port}/token`, init),
+    });
+    expect(await runOAuth(f.options)).toEqual({ kind: mode === 'complete' ? 'success' : 'timeout' });
+    await closed;
+    expect(new URLSearchParams(receivedBody).get('code')).toBe(CODE);
+    expect(receivedAuthorization).toBeUndefined();
+    await expectClosed(f.auth()!.searchParams.get('redirect_uri')!);
+  });
+
   it('faviconは404で継続し、loopbackの別アドレスでは待ち受けない', async () => {
     const f = fixture({ openBrowser: async (value) => {
       const auth = new URL(value);
       const redirect = new URL(auth.searchParams.get('redirect_uri')!);
-      const socket = connect({ host: '127.0.0.2', port: Number(redirect.port) });
+      // macOSの未設定127.0.0.2は接続が停滞するため、実際に存在する自機の別アドレスを使う。
+      const otherAddress = Object.values(networkInterfaces()).flat().find((entry) => entry?.family === 'IPv4' && !entry.internal)?.address ?? '::1';
+      const socket = connect({ host: otherAddress, port: Number(redirect.port) });
       await new Promise<void>((resolve, reject) => {
         socket.once('error', () => resolve());
         socket.once('connect', () => { socket.destroy(); reject(new Error('loopback全体に公開された')); });

@@ -22,6 +22,7 @@
 - `npm run lint` — Lint
 - `npm run build` — TypeScript のビルド
 - `npm run zoom:init` / `npm run zoom:auth` — Zoom SDK の初期化・認証の手元確認（Docker と Git 管理外の SDK が必要。CI では実行しない。prototypes/zoom/README.md）
+- `npm run zoom:oauth` — Mac のブラウザで本人が OAuth を許可しトークン取得を確認（設定は `.local/zoom-oauth.env`。SDK 認証とは別。本物の認可は人間が確認。prototypes/zoom/OAUTH.md）
 
 ## ディレクトリ構成
 ```

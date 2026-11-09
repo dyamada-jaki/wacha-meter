@@ -6,6 +6,7 @@
 - [実現方法の初期調査](docs/research/feasibility.md)
 - [現在地・次の Issue 候補](docs/next-issues.md)
 - [最初の Zoom 試作：準備・SDK 入手手順](prototypes/zoom/README.md)
+- [Mac での Zoom OAuth：設定と人間による認可の確認手順](prototypes/zoom/OAUTH.md)（本物の認可は未確認）
 
 無料でできる構成を基本とし、Zoom の有料アカウントは候補に含めます。その他の有料ボット API・有料 AI API・有料サーバーを前提にせず、手元の PC での実行を優先して調査しています。
 
@@ -21,7 +22,7 @@ npm run lint
 npm run build
 ```
 
-テストは Zoom SDK の初期化・認証の検証コマンド（判定・JWT 作成・プロセス管理）を対象にしています。SDK の実物での確認は [prototypes/zoom/README.md](prototypes/zoom/README.md) の手順で手元で行います。開発サーバーや画面はまだありません。
+テストは Zoom SDK の初期化・認証コマンド（判定・JWT 作成・プロセス管理）と、OAuth の loopback・PKCE・失敗/中断処理を対象にしています。SDK の実物での確認は [prototypes/zoom/README.md](prototypes/zoom/README.md)、本人による OAuth の確認は [prototypes/zoom/OAUTH.md](prototypes/zoom/OAUTH.md) の手順で手元で行います。開発サーバーや画面はまだありません。
 
 以下は、このリポジトリで使うエージェント開発プロセスの説明です。
 
