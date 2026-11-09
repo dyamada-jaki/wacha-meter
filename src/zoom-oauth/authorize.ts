@@ -10,6 +10,15 @@ export interface AuthorizeUrlInput {
   readonly state: string;
 }
 
-export function buildAuthorizeUrl(_input: AuthorizeUrlInput): string {
-  throw new Error('未実装');
+export function buildAuthorizeUrl(input: AuthorizeUrlInput): string {
+  const url = new URL(input.authorizeUrl);
+  url.search = new URLSearchParams({
+    response_type: 'code',
+    client_id: input.clientId,
+    redirect_uri: input.redirectUri,
+    code_challenge: input.codeChallenge,
+    code_challenge_method: 'S256',
+    state: input.state,
+  }).toString();
+  return url.toString();
 }

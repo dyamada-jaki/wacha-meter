@@ -1,6 +1,6 @@
 # Zoom 接続試作の準備
 
-目的は、今の Mac 上で「わちゃメーター」が独立した参加者として入室し、主催者の許可を受けて音声を取得すること。現在は SDK の初期化・認証を確かめる検証プログラムまで（[Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1)）。会議参加プログラムは未実装。
+目的は、今の Mac 上で「わちゃメーター」が独立した参加者として入室し、主催者の許可を受けて音声を取得すること。現在は SDK の初期化・認証を確かめる検証プログラム（[Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1)）と、本人の Zoom アカウントで OAuth を許可してトークン取得を確かめるコマンド（[Issue #4](https://github.com/dyamada-jaki/wacha-meter/issues/4)）まで。会議参加プログラムは未実装。
 
 ## SDK の受領と引き継ぎ
 
@@ -138,6 +138,54 @@ npm run zoom:auth -- --offline         # ネットワークを切って時間切
 | 実認証 | 成功しなかった。本物の認証情報では、SDKAuth は SDKERR_SUCCESS を返すが、120 秒待っても `onAuthenticationReturn` が呼ばれない（2026-11-08。SDK からの `AUTHRET_OVERTIME` ではない）。Zoom（zoom.us）への HTTPS のやり取りは完了しており、DNS・TLS・時刻・書き込み先に問題は見つかっていない。上記のフォーラムの報告を受けて 7.2.1.5860 に替えた |
 
 SDK の初期化・認証の成功は、ボット用途の採用や外部会議への参加の承認を意味しない（[初期調査](../../docs/research/feasibility.md)）。
+
+## Zoom アカウント連携（OAuth）の確認（Issue #4）
+
+本人の Zoom アカウントで、この試作（General App の開発用設定）を許可し、OAuth トークンを取得できるかだけを確かめる。会議への参加・OBF トークンの取得・音声取得は行わない。Docker・SDK は使わず、Mac 上の Node.js だけで動く（ブラウザと戻り先の待受が Mac 側にあるため）。SDK の初期化・認証（上の節）とは別の設定・別のコマンドで、互いの設定を読まない。
+
+### 仕組み
+
+| 項目 | 内容 |
+|---|---|
+| 方式 | Public Client OAuth（Client Secret なし）+ PKCE（S256）+ `state`。公式資料: [OAuth（PKCE・loopback）](https://developers.zoom.us/docs/integrations/oauth/)（2026-11-09 確認） |
+| 戻り先 | `http://127.0.0.1:<一時ポート>/callback`。`127.0.0.1` だけで待ち受ける。Zoom は loopback の戻り先のポートを照合しないため、登録済みの `http://127.0.0.1/callback` と一致する |
+| 待機 | 既定 180 秒（`--timeout` で 30〜600 秒）。Ctrl+C で中断できる。応答・時間切れ・中断・失敗のどれでも、待受を閉じてから終わる |
+| トークン | `https://zoom.us/oauth/token` に認可コードと `code_verifier` を送る。成功の判定は HTTP 200 で、`access_token` があり、`token_type` が bearer、`expires_in` が正の数のとき。表示するのは種類・有効期間・スコープだけ。トークンはプロセスのメモリだけで扱い、保存・自動更新はしない。`refresh_token` は使わずに捨てる |
+| 表示しないもの | Public Client ID、認可 URL（Client ID を含む）、認可コード、`state`、`code_verifier`、トークン。ブラウザに返す画面も固定の文言だけ |
+
+終了コード: 0 成功 / 1 不正な応答（`state` の不一致・欠落、認可コードなし、想定外のトークン応答）・トークン取得失敗・ブラウザを開けない / 2 設定・引数の誤り（ブラウザは開かない）/ 3 認可の拒否 / 4 時間切れ / 130・143 中断（Ctrl+C・SIGTERM）。
+
+### Public Client ID の設定（ユーザーが行う）
+
+SDK 用の `ZOOM_SDK_CLIENT_ID` / `ZOOM_SDK_CLIENT_SECRET`（`.local/zoom-credentials.env`）とは別のファイル・別の変数名にする。既存の `.local/zoom-credentials.env` は編集しない。Zoom の画面で同じ値に見えても、別々に書く。
+
+1. Zoom App Marketplace の General App「わちゃメーター（開発用）」で、Basic Information → App Credentials を開き、「Use Public Client OAuth」が ON であること、Redirect URL for OAuth と OAuth Allow List が `http://127.0.0.1/callback`、スコープに `user:read:token` があることを確かめる
+2. 同じ欄の Public Client ID をコピーする（Client Secret は使わないので、どこにも書かない）
+3. エディタで、リポジトリ直下に `.local/zoom-oauth.env` を作り、次の1行を書く（`.local/` は .gitignore 済み。シェルの履歴・チャット・Issue・PR には貼らない）
+
+   ```
+   ZOOM_OAUTH_CLIENT_ID=<Public Client ID>
+   ```
+
+4. `chmod 600 .local/zoom-oauth.env` で自分だけが読めるようにする
+
+未設定・空・空白や改行を含む値は、ブラウザを開かずに終了コード 2 で知らせる（値は表示しない）。
+
+### 本物の認可の確かめ方（ユーザーが行う）
+
+1. `npm run zoom:oauth` を実行する（2段階認証などで時間がかかるなら `npm run zoom:oauth -- --timeout 300`）
+2. 開いたブラウザで Zoom にログインし、アプリの許可画面で許可する
+3. ブラウザに「応答を受け取りました」と出たら画面を閉じ、ターミナルの最後の1行と終了コード（`echo $?`）を確かめる
+4. 開発チーム・PO には、最後の1行と終了コードだけを伝える（ブラウザのアドレス欄・画面の値は貼らない）
+
+- 成功の確認は最大3回まで。3回とも失敗したら、それ以上は試さずに表示と終了コードを伝えて相談する
+- 許可画面に拒否の選択肢があれば、任意で1回拒否し、終了コード 3 になることも確かめられる
+- 中断は Ctrl+C（終了コード 130。待受を閉じて終わる）
+- 本物の認可でトークン API が `invalid_client` を返した場合、まず Client ID の送り方を疑う。公式資料には「Public Client ID を Base64 で送る」との記述がある一方、例は平文の `client_id` を使っており、この試作は平文で送っている
+
+### 自動テストとの分担
+
+`tests/zoom-oauth/` は、Zoom の認可画面（ブラウザ操作）とトークン API だけを偽物にし、一時サーバー・HTTP・PKCE の計算は実物で確かめる（CI でも動く）。本物の Zoom でのログイン・許可・トークン取得は、上の手順で人間が確かめ、自動テストとは別に記録する。
 
 ## SDK 入手手順（今回の取得は完了）
 

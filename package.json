@@ -13,7 +13,8 @@
     "lint": "eslint . --max-warnings 0",
     "build": "tsc -p tsconfig.build.json",
     "zoom:init": "npm run build && node --env-file-if-exists=.local/zoom-credentials.env dist/zoom-auth/main.js init",
-    "zoom:auth": "npm run build && node --env-file-if-exists=.local/zoom-credentials.env dist/zoom-auth/main.js auth"
+    "zoom:auth": "npm run build && node --env-file-if-exists=.local/zoom-credentials.env dist/zoom-auth/main.js auth",
+    "zoom:oauth": "npm run build && node --env-file-if-exists=.local/zoom-oauth.env dist/zoom-oauth/main.js"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",
