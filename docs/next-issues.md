@@ -24,9 +24,13 @@ SDK 7.1.5.4434 では本物の認証情報でコールバックが来ない症�
 
 使用する SDK は `zoom-meeting-sdk-linux-7.2.1.5860.tar.xz` 内の `arm64/`。SHA-256 は `ddf8daffb053a7bd4702ac9f6f7de2ab6cb58a537eb3448df18a499ac7e62750`（受領ファイルの識別用。提供元の署名検証ではない）。採用した技術判断は [ADR 0001](decisions/0001-zoom-sdk試作はDocker上のC++とTypeScriptに分ける.md)・[ADR 0002](decisions/0002-zoom-sdkは7.2.1.5860のarm64を使う.md)。
 
-## 後続 Issue の候補（未登録）
+## 登録済みの次の Issue
 
-2026-11-09: ユーザーの「次の検討に進みましょう」を受け、[外部会議への接続検証案](research/external-meeting-test.md) を作成した。公式の OBF・ベータ共有・ローカル OAuth の条件を再確認。次の開発候補は **自分の Zoom アカウントを手元の試作に連携する** 小さな Issue とし、その後に入室・退出、音声受信を分ける案。ご自身が同席する利用形態、協力者、既存 General App の設定可否は確認中。提案段階であり、Issue 登録・「開発可」付与・実装はまだ行わない。
+[Issue #4: 自分の Zoom アカウントを手元の試作に連携する](https://github.com/dyamada-jaki/wacha-meter/issues/4) を先行登録した。本人の同席はユーザーの「自身も同席でOK」により確定。既存 General App の Public Client OAuth・スコープ・loopback redirect の設定可否と、受け入れ条件案の仕様反映が着手条件。「開発可」は未付与、開発チームは未起動。
+
+2026-11-09 の [接続検証案](research/external-meeting-test.md) に基づき、アカウント連携 → 入室・退出 → 音声受信の順に分ける。会議を開く協力者は未確認だが、会議に接続しないアカウント連携の準備とは分けて扱う。
+
+## 後続 Issue の候補（未登録）
 
 ### 入室検証の前提: 外部会議のベータテスト経路を具体化する
 
@@ -55,7 +59,7 @@ SDK 7.1.5.4434 では本物の認証情報でコールバックが来ない症�
 - SDK 展開スクリプトの R5: 改行を含むリンク名で検査が抜ける問題への対応（推奨）。現状は固定した SDK 向けで、任意のアーカイブの安全を保証しない。
 - C++ / TypeScript 間の結果行の決まりごとを1か所にまとめる。
 
-いずれも [Issue #1 レポート](issue-reports/issue-1.md) の候補として保持する。新しい Issue の登録・着手はしていない。
+いずれも [Issue #1 レポート](issue-reports/issue-1.md) の候補として保持する。これらの改善候補は Issue 未登録・未着手。
 
 ## 持ち越し
 
