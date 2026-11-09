@@ -60,7 +60,16 @@ export async function runOAuthFlow(options: OAuthFlowOptions): Promise<OAuthOutc
 
   let received = false;
   const server = createServer((req, res) => {
-    const url = new URL(req.url ?? '/', `http://${LOOPBACK_HOST}`);
+    let url: URL;
+    try {
+      url = new URL(req.url ?? '/', `http://${LOOPBACK_HOST}`);
+    } catch {
+      // URL として解析できない request-target。入力も例外の本文も出さず、
+      // /callback 以外と同じく固定の応答を返して待ち続ける
+      res.writeHead(400, { 'content-type': 'text/plain; charset=utf-8', connection: 'close' });
+      res.end('Bad Request');
+      return;
+    }
     if (req.method !== 'GET' || url.pathname !== CALLBACK_PATH || received || settled) {
       res.writeHead(404, { 'content-type': 'text/plain; charset=utf-8', connection: 'close' });
       res.end('Not Found');
