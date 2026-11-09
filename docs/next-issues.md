@@ -26,7 +26,7 @@ SDK 7.1.5.4434 では本物の認証情報でコールバックが来ない症�
 
 ## 登録済みの次の Issue
 
-[Issue #4: 自分の Zoom アカウントを手元の試作に連携する](https://github.com/dyamada-jaki/wacha-meter/issues/4) の着手条件を PO が確認した。本人同席、Public Client OAuth の ON、2つの戻り先設定 `http://127.0.0.1/callback`、`user:read:token` の追加はユーザー報告済み。受け入れ条件を spec.md に反映。実認可は未検証で、Public Client ID のローカル設定と本人の許可操作は開発チームの計画・検証手順へ引き継ぐ。次は「開発可」を付けて開発チームへ計画作成を渡す。
+[Issue #4: 自分の Zoom アカウントを手元の試作に連携する](https://github.com/dyamada-jaki/wacha-meter/issues/4) の着手条件を PO が確認した。本人同席、Public Client OAuth の ON、2つの戻り先設定 `http://127.0.0.1/callback`、`user:read:token` の追加はユーザー報告済み。受け入れ条件を spec.md に反映。実認可は未検証で、Public Client ID のローカル設定と本人の許可操作は開発チームの計画・検証手順へ引き継ぐ。「開発可」を付け、開発チームを手動起動済み。Issue は「着手中」で、`/dual-implement 4` の指示送信を確認した（端末 `term_22ac5b6e-1d5a-48ee-9410-268c2b9534a8`）。次は開発チームによる計画提示・人間の計画承認。定期起動は無効のまま。
 
 2026-11-09 の [接続検証案](research/external-meeting-test.md) に基づき、アカウント連携 → 入室・退出 → 音声受信の順に分ける。会議を開く協力者は未確認だが、会議に接続しないアカウント連携の準備とは分けて扱う。
 
