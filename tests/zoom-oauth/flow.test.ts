@@ -6,6 +6,7 @@ import {
   connectionRefused,
   createFakeBrowser,
   FAKE_ACCESS_TOKEN,
+  FAKE_BAD_TARGET_SECRET,
   FAKE_CLIENT_ID,
   FAKE_CODE,
   FAKE_REFRESH_TOKEN,
@@ -54,7 +55,7 @@ async function run(options: RunOptions = {}) {
 
 /** どの経路でも、画面・ログ・ブラウザへの応答に秘密の値を出さない */
 function expectNoSecrets(output: string, verifier?: string | null) {
-  for (const secret of [FAKE_CLIENT_ID, FAKE_CODE, FAKE_ACCESS_TOKEN, FAKE_REFRESH_TOKEN]) {
+  for (const secret of [FAKE_CLIENT_ID, FAKE_CODE, FAKE_ACCESS_TOKEN, FAKE_REFRESH_TOKEN, FAKE_BAD_TARGET_SECRET]) {
     expect(output).not.toContain(secret);
   }
   if (verifier) expect(output).not.toContain(verifier);
@@ -95,6 +96,14 @@ describe('runOAuthFlow: 成功', () => {
     const r = await run({ browser: 'favicon_then_approve' });
     expect(r.outcome.kind).toBe('succeeded');
     expect(r.browser.responses()[0]?.status).toBe(404);
+  });
+
+  it('URL として解析できない request-target は 400 を返して待ち続け、値を出さずに、その後の正しい応答で成功する', async () => {
+    const r = await run({ browser: 'bad_target_then_approve' });
+    expect(r.browser.responses()[0]?.status).toBe(400);
+    expect(r.outcome.kind).toBe('succeeded');
+    expect(r.closed).toBe(true);
+    expectNoSecrets(r.output);
   });
 });
 

@@ -11,12 +11,16 @@
 
 import { createHash } from 'node:crypto';
 import { createServer, type IncomingMessage, type Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
+import { connect, type AddressInfo } from 'node:net';
 
 export const FAKE_CLIENT_ID = 'fake-public-client-id-Q7x';
 export const FAKE_CODE = 'fake-authorization-code-K3m';
 export const FAKE_ACCESS_TOKEN = 'fake-access-token-Z9p';
 export const FAKE_REFRESH_TOKEN = 'fake-refresh-token-W2n';
+/** 不正な request-target に含める架空の秘密の値 */
+export const FAKE_BAD_TARGET_SECRET = 'fake-bad-target-secret-V5r';
+/** URL として解析できない request-target（認可コードに当たる値を含む） */
+export const BAD_REQUEST_TARGET = `http://[?code=${FAKE_BAD_TARGET_SECRET}`;
 
 /** 偽ブラウザが見た認可 URL の内容 */
 export interface SeenAuthorize {
@@ -33,6 +37,7 @@ export type BrowserBehavior =
   | 'provider_error'
   | 'no_code'
   | 'favicon_then_approve'
+  | 'bad_target_then_approve'
   | 'never'
   | 'fail';
 
@@ -77,6 +82,12 @@ export function createFakeBrowser(behavior: BrowserBehavior): FakeBrowser {
       case 'favicon_then_approve': {
         const origin = new URL(redirectUri).origin;
         await get(`${origin}/favicon.ico`);
+        return get(callback({ code: FAKE_CODE, state }));
+      }
+      case 'bad_target_then_approve': {
+        const port = Number(new URL(redirectUri).port);
+        const raw = await sendRawRequest(port, BAD_REQUEST_TARGET);
+        if (raw !== undefined) responses.push(raw);
         return get(callback({ code: FAKE_CODE, state }));
       }
       case 'never':
@@ -214,4 +225,32 @@ export async function connectionRefused(port: number): Promise<boolean> {
     const cause = (error as { cause?: { code?: string } }).cause;
     return cause?.code === 'ECONNREFUSED';
   }
+}
+
+/**
+ * fetch では送れない request-target を、TCP で直接送る。
+ * 応答の状態と本文を返す。接続が切れたまま応答が無いとき・上限を過ぎたときは undefined。
+ */
+export function sendRawRequest(
+  port: number,
+  target: string,
+  timeoutMs = 2000,
+): Promise<{ readonly status: number; readonly body: string } | undefined> {
+  return new Promise((resolve) => {
+    let data = '';
+    const socket = connect(port, '127.0.0.1', () => {
+      socket.write(`GET ${target} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n`);
+    });
+    const timer = setTimeout(() => socket.destroy(), timeoutMs);
+    socket.setEncoding('utf8');
+    socket.on('data', (chunk: string) => (data += chunk));
+    socket.on('error', () => undefined);
+    socket.on('close', () => {
+      clearTimeout(timer);
+      const match = /^HTTP\/1\.1 (\d{3})/.exec(data);
+      if (match === null) return resolve(undefined);
+      const index = data.indexOf('\r\n\r\n');
+      resolve({ status: Number(match[1]), body: index < 0 ? '' : data.slice(index + 4) });
+    });
+  });
 }

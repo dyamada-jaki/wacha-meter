@@ -5,7 +5,7 @@ import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
-import { connectionRefused } from './fake-zoom.js';
+import { BAD_REQUEST_TARGET, connectionRefused, FAKE_BAD_TARGET_SECRET, sendRawRequest } from './fake-zoom.js';
 
 const PUBLIC_ID = 'main-test-public-client-id-R4t';
 
@@ -75,5 +75,23 @@ describe('zoom-oauth main', () => {
     // 認可 URL（Client ID を含む）を画面に出さない
     expect(main.output()).not.toContain(PUBLIC_ID);
     expect(main.output()).toContain('中断');
+  }, 15000);
+
+  it('待機中に URL として解析できない request-target が届いても落ちず、値を出さずに待ち続ける', async () => {
+    const main = startMain({ ZOOM_OAUTH_CLIENT_ID: PUBLIC_ID });
+    const authorize = await waitForOpen();
+    const port = Number(new URL(authorize.searchParams.get('redirect_uri') ?? '').port);
+    const response = await sendRawRequest(port, BAD_REQUEST_TARGET);
+    await new Promise((r) => setTimeout(r, 300));
+    // 未捕捉例外で終わらず、待ち続けている
+    expect(main.child.exitCode).toBeNull();
+    expect(response?.status).toBe(400);
+    expect(response?.body ?? '').not.toContain(FAKE_BAD_TARGET_SECRET);
+    // 決まった閉じ方（中断）で終わり、待受を閉じる
+    main.child.kill('SIGINT');
+    expect(await main.exited).toBe(130);
+    expect(await connectionRefused(port)).toBe(true);
+    expect(main.output()).not.toContain(FAKE_BAD_TARGET_SECRET);
+    expect(main.output()).not.toContain(PUBLIC_ID);
   }, 15000);
 });
