@@ -1,6 +1,6 @@
 # 外部会議への接続検証案
 
-確認日: 2026-11-09。PO による次の検討。実装・アプリ設定変更・申請・会議接続は未実施。本人の同席はユーザーが確認済み。それ以外の仕様案と Issue 分割は着手前の検討事項。現在の確定事項は [spec.md](../spec.md)、前段の完了記録は [Issue #1](../issue-reports/issue-1.md)。
+確認日: 2026-11-09。PO による次の検討。実装・申請・会議接続は未実施。OAuth のアプリ設定はユーザーが実施（下記）。本人の同席はユーザーが確認済み。それ以外の仕様案と Issue 分割は着手前の検討事項。現在の確定事項は [spec.md](../spec.md)、前段の完了記録は [Issue #1](../issue-reports/issue-1.md)。
 
 ## 今回分かったこと
 
@@ -8,7 +8,7 @@
 |---|---|---|
 | SDK 認証と外部会議参加 | SDK の JWT に加え、アプリを OAuth で許可した参加者に紐付く OBF トークンを使う。本人の入室前は参加できず、本人が退出すると SDK セッションも終了する | #1 の認証成功だけでは外部会議には入れない。ご自身も同席する形で試す（ユーザー確認済み） |
 | 外部会議のベータテスト | Request to Share の承認後、認可 URL を外部の主催者へ共有する手順がある。Technical Design とセキュリティ資料等の提出が必要 | 会議 URL と主催者の口頭許可だけでは準備完了にならない |
-| ローカルの OAuth | Public Client OAuth / PKCE と loopback redirect により、Mac 上のブラウザからローカルの一時 HTTP サーバーへ認可応答を戻せる | 公開サーバー・有料トンネルを前提にせずアカウント連携を試せる。既存アプリでの設定可否は未確認 |
+| ローカルの OAuth | Public Client OAuth / PKCE と loopback redirect により、Mac 上のブラウザからローカルの一時 HTTP サーバーへ認可応答を戻せる | 公開サーバー・有料トンネルを前提にせずアカウント連携を試せる。Public Client OAuth と loopback redirect はユーザーが設定済み。実認可は未検証 |
 | OBF 取得 API | `GET /v2/users/me/token?type=onbehalf`。粒度の細かいユーザー用スコープは `user:read:token`。API は `meeting_id` パラメーターも持つ | SDK の Client Secret だけで代用しない。対象会議とアプリ設定に合わせて取得を検証する |
 
 根拠: [OBF 認証](https://developers.zoom.us/docs/meeting-sdk/auth/obf/)、[認証変更 FAQ](https://godevelopers.zoom.us/docs/meeting-sdk/obf-faq/)、[外部ベータテスト](https://godevelopers.zoom.us/docs/distribute/sharing-private-and-beta-apps/)、[OAuth / PKCE / loopback](https://developers.zoom.us/docs/integrations/oauth/)、[Users API](https://developers.zoom.us/docs/api/users/)。
@@ -42,7 +42,8 @@ PO の提案は、本人が同席する OBF 経路を検証候補に絞り、ア
 着手前に確認すること:
 
 - 本人の同席は確認済み。Zoom の実際のログイン・アプリ許可は検証時に本人が行う。
-- 既存 General App のユーザー認可方式、Public Client OAuth、`user:read:token`、loopback redirect の設定可否。既存の SDK 認証用 Client ID と、OAuth の Public Client ID を混同しない。
+- Public Client OAuth を ON にし、Redirect URL for OAuth と OAuth Allow List に `http://127.0.0.1/callback` を設定済み（ユーザー報告。実際の OAuth は未検証）。
+- 既存 General App のユーザー認可方式と `user:read:token` の設定可否は未確認。既存の SDK 認証用 Client ID と、OAuth の Public Client ID を混同しない。
 - 実認可時の操作分担・試行回数・期限を計画で決める。ログイン・許可操作は人間が行い、秘密の値をチャットへ貼らない。
 
 受け入れ条件案:

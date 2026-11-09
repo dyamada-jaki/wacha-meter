@@ -26,7 +26,7 @@ SDK 7.1.5.4434 では本物の認証情報でコールバックが来ない症�
 
 ## 登録済みの次の Issue
 
-[Issue #4: 自分の Zoom アカウントを手元の試作に連携する](https://github.com/dyamada-jaki/wacha-meter/issues/4) を先行登録した。本人の同席はユーザーの「自身も同席でOK」により確定。既存 General App の Public Client OAuth・スコープ・loopback redirect の設定可否と、受け入れ条件案の仕様反映が着手条件。「開発可」は未付与、開発チームは未起動。
+[Issue #4: 自分の Zoom アカウントを手元の試作に連携する](https://github.com/dyamada-jaki/wacha-meter/issues/4) を先行登録した。本人の同席はユーザーの「自身も同席でOK」により確定。Public Client OAuth を ON にし、Redirect URL for OAuth と OAuth Allow List に `http://127.0.0.1/callback` を設定済み（ユーザー報告。実際の OAuth は未検証）。残る着手条件はユーザー認可方式・必要スコープの確認と、受け入れ条件案の仕様反映。「開発可」は未付与、開発チームは未起動。
 
 2026-11-09 の [接続検証案](research/external-meeting-test.md) に基づき、アカウント連携 → 入室・退出 → 音声受信の順に分ける。会議を開く協力者は未確認だが、会議に接続しないアカウント連携の準備とは分けて扱う。
 
