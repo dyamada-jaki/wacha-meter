@@ -228,4 +228,4 @@ orca orchestration worker-start --spec "<下の品質レビュー用の指示>" 
      - サーバーの起動と停止は、頼まれれば開発チームが行えることも伝える
    - この開発チームの端末で `/finish-issue <採る PR 番号>`（Codex なら `$finish-issue`）を実行すれば、マージ・後片付け・ふりかえりの結果と改善案の共有、人間が承認した改善の反映まで行えること（採らない理由を一言添える）
 
-最後に `orca orchestration worker-list --run <run_id> --terminal-state reclaimable --json` が空であることを確かめてから終える。この端末は finish-issue まで開いたままにする（開発チームの登録は finish-issue の最後に外す）。
+最後に `orca orchestration worker-list --run <run_id> --terminal-state reclaimable --json` が空であることを確かめ、`dev-team.sh mark N 開発チーム 待ち` を実行してから終える（人間の返事を待つ時間を、作業時間に入れないため）。この端末は finish-issue まで開いたままにする（開発チームの登録は finish-issue の最後に外す）。
