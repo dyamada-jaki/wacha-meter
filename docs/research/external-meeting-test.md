@@ -1,6 +1,6 @@
 # 外部会議への接続検証案
 
-確認日: 2026-11-09。PO による次の検討。実装・申請・会議接続は未実施。OAuth のアプリ設定はユーザーが実施（下記）。本人の同席はユーザーが確認済み。Issue #4 のアカウント連携の範囲は spec.md に反映済み。以降の入室・音声受信は検討事項。現在の確定事項は [spec.md](../spec.md)、前段の完了記録は [Issue #1](../issue-reports/issue-1.md)。
+外部資料の確認日: 2026-11-09。進捗更新: 2026-11-10。OAuth の実装は取り込み済み。実認可・申請・会議接続は未実施。OAuth のアプリ設定はユーザーが実施（下記）。本人の同席はユーザーが確認済み。Issue #4 のアカウント連携の範囲は spec.md に反映済み。以降の入室・音声受信は検討事項。現在の確定事項は [spec.md](../spec.md)、前段の完了記録は [Issue #1](../issue-reports/issue-1.md)。
 
 ## 今回分かったこと
 
@@ -43,8 +43,8 @@ PO の提案は、本人が同席する OBF 経路を検証候補に絞り、ア
 
 - 本人の同席は確認済み。Zoom の実際のログイン・アプリ許可は検証時に本人が行う。
 - Public Client OAuth を ON にし、Redirect URL for OAuth と OAuth Allow List に `http://127.0.0.1/callback` を設定済み（ユーザー報告。実際の OAuth は未検証）。
-- `user:read:token` もユーザーが追加済み。ユーザー認可は Public Client OAuth / PKCE で行う。既存の SDK 認証用 Client ID と OAuth の Public Client ID を混同しない。Public Client ID のローカル設定手順は開発チームが用意する。
-- 実認可時の操作分担・試行回数・期限を計画で決める。ログイン・許可操作は人間が行い、秘密の値をチャットへ貼らない。
+- `user:read:token` もユーザーが追加済み。ユーザー認可は Public Client OAuth / PKCE で行う。既存の SDK 認証用 Client ID と OAuth の Public Client ID を混同しない。Public Client ID の設定手順は `prototypes/zoom/README.md` に用意済み。旧 worktree の設定ファイルは削除済みなので、再開時に main の設定を確認する。
+- 計画承認済みの待機は既定180秒（30〜600秒）、実認可の成功確認は最大3回。ログイン・許可操作は人間が行い、秘密の値をチャットへ貼らない。
 
 受け入れ条件（正本は spec.md）:
 
@@ -57,7 +57,9 @@ PO の提案は、本人が同席する OBF 経路を検証候補に絞り、ア
 
 スコープ外: 会議参加、OBF を使った入室成功の判定、音声取得、採点、結果画面、外部配布、課金、ベータ共有申請の送信。
 
-この案はアカウント連携の準備であり、ボット用途や外部会議参加の承認を代替しない。実装方法の詳細と期限の値は開発チームの計画で具体化する。[Issue #4](https://github.com/dyamada-jaki/wacha-meter/issues/4) として先行登録済み。設定のユーザー報告を受け、受け入れ条件を spec.md に反映済み。PO が着手条件を確認し、開発チームに計画作成を渡す。
+Issue #4 は PR #5（main `0bec6f1`）を取り込み、人間の判断で実認可未確認のままクローズした。上記の受け入れ条件1を合格と扱わない。実認可と追加の振る舞いの採否は [Issue #7](https://github.com/dyamada-jaki/wacha-meter/issues/7) に持ち越し、本人がテストできるときに再開する。詳細は [Issue #4 レポート](../issue-reports/issue-4.md)。この取り込みはボット用途・外部会議参加の承認を代替しない。
+
+OAuth を Mac の Node.js で実行し、設定を部品ごとに分ける判断は [ADR 0003](../decisions/0003-zoomアカウント連携はmacのnodeで動かし設定は部品ごとに分ける.md) として採用済み。成功条件・エラー表示・リダイレクト・404・400の扱いは、実装されているが仕様としての採否は未決。
 
 ## その後の分割案
 

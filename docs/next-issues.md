@@ -1,6 +1,6 @@
 # 現在地と次に切る Issue
 
-最終更新: 2026-11-09。PO が管理する。
+最終更新: 2026-11-10。PO が管理する。
 
 ## 現在地
 
@@ -8,15 +8,15 @@
 |---|---|
 | 構想 | ユーザーの依頼を spec.md に記録済み |
 | 実現方法 | 無料を基本に Zoom 有料アカウントも許容。他者主催会議が必要。SDK のボット向け認証資料と用途制限が不整合のため、自作 SDK ボットは採用保留。Recall.ai・RTMS は追加課金のため除外。方式は未決 |
-| 制作の環境 | Node.js 24 / TypeScript / Vitest / ESLint。Issue #1 で通常のテストに切替済み。111件と型チェック・Lint・ビルドが成功（開発チームの完了記録） |
-| CI | main `3ffb2c3` の [GitHub Actions](https://github.com/dyamada-jaki/wacha-meter/actions/runs/42492740354) が成功 |
+| 制作の環境 | Node.js 24 / TypeScript / Vitest / ESLint。PR #5 の head `31a4d5a` で169件と型チェック・Lint・ビルドが成功（開発チームの完了記録） |
+| CI | PR #5 取り込み後の main `0bec6f1` の [GitHub Actions](https://github.com/dyamada-jaki/wacha-meter/actions/runs/42800349130) が成功 |
 | 開発プロセス | ラベル・PO 登録済み。起動係はこのリポジトリ専用に作成、無効のまま |
-| main 取り込み | PR #2 を squash で取り込み済み（`0dd6388`）。完了レポート・採用 ADR は `3ffb2c3` に記録済み |
-| 実機検証 | SDK 7.2.1.5860 の初期化・実認証成功・後始末を確認済み。許可を受けたワーカーが実行。画面はなく、人間による画面確認は対象外。会議接続・観測・採点・通知は未実施 |
-| 区切り1 | 未達。Issue #1 の初期化・認証は完了。入室・音声取得・退出は後続 |
+| main 取り込み | PR #2（`0dd6388`）、PR #5（`0bec6f1`）を squash で取り込み済み。#4 の完了レポート・ADR 0003 は `4417355` に記録済み |
+| 実機検証 | SDK 7.2.1.5860 の実認証は成功済み。OAuth の本人によるログイン・許可・トークン取得は未確認で Issue #7 へ持ち越し。会議接続・観測・採点・通知は未実施 |
+| 区切り1 | 未達。SDK 初期化・認証は確認済み、OAuth は実装済み・実認可未確認。入室・音声取得・退出は後続 |
 | 接続試作の環境 | ARM64 Ubuntu 24.04 / Docker、C++ / TypeScript の試作を採用。SDK 7.2.1.5860 の arm64 とビルド結果は main の `.local/`（Git 管理外）に保持。SDK 本体・認証情報はイメージに含めない |
 
-## 完了した Issue
+## 取り込み済みの Issue（未確認の残件は区別する）
 
 [Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1) は完了。[PR #2](https://github.com/dyamada-jaki/wacha-meter/pull/2) を採用・マージし、PR #3 は不採用で閉じた。作業用 worktree・ローカルブランチ・ワーカー用イメージの後片付けも完了。詳細の正本は [Issue レポート](issue-reports/issue-1.md)、引き継ぎ元は [完了コメント](https://github.com/dyamada-jaki/wacha-meter/issues/1#issuecomment-6723074851)。
 
@@ -24,11 +24,21 @@ SDK 7.1.5.4434 では本物の認証情報でコールバックが来ない症�
 
 使用する SDK は `zoom-meeting-sdk-linux-7.2.1.5860.tar.xz` 内の `arm64/`。SHA-256 は `ddf8daffb053a7bd4702ac9f6f7de2ab6cb58a537eb3448df18a499ac7e62750`（受領ファイルの識別用。提供元の署名検証ではない）。採用した技術判断は [ADR 0001](decisions/0001-zoom-sdk試作はDocker上のC++とTypeScriptに分ける.md)・[ADR 0002](decisions/0002-zoom-sdkは7.2.1.5860のarm64を使う.md)。
 
+### Issue #4: 実装を取り込み、実認可を持ち越してクローズ
+
+[PR #5](https://github.com/dyamada-jaki/wacha-meter/pull/5) は main `0bec6f1` に取り込み済み。PR #6 は不採用で閉じ、開発チームの後片付けも完了。人間はテストが今は難しいため未確認のまま閉じると判断した。**受け入れ条件1は未確認であり、完了した検証には含めない。** PO の一次判断も「人間の判断が必要」のまま。記録は [レポート](issue-reports/issue-4.md) と [申し送り](https://github.com/dyamada-jaki/wacha-meter/issues/4#issuecomment-6765202667)。
+
+採用した [ADR 0003](decisions/0003-zoomアカウント連携はmacのnodeで動かし設定は部品ごとに分ける.md) により、OAuth は Mac の Node.js、SDK は Docker 上の C++、設定は部品ごとの `.local/*.env` に分ける。両者のトークン受け渡しは後続の設計事項。
+
 ## 登録済みの次の Issue
 
-[Issue #4: 自分の Zoom アカウントを手元の試作に連携する](https://github.com/dyamada-jaki/wacha-meter/issues/4) の着手条件を PO が確認した。本人同席、Public Client OAuth の ON、2つの戻り先設定 `http://127.0.0.1/callback`、`user:read:token` の追加はユーザー報告済み。受け入れ条件を spec.md に反映。実認可は未検証で、Public Client ID のローカル設定と本人の許可操作は開発チームの計画・検証手順へ引き継ぐ。「開発可」を付け、開発チームを手動起動済み。Issue は「着手中」で、`/dual-implement 4` の指示送信を確認した（端末 `term_22ac5b6e-1d5a-48ee-9410-268c2b9534a8`）。次は開発チームによる計画提示・人間の計画承認。定期起動は無効のまま。
+[Issue #7: Zoom アカウント連携の実認可と未決の振る舞いを確認する](https://github.com/dyamada-jaki/wacha-meter/issues/7) を持ち越しの追跡用に登録した。担当は人間と PO。本人がテストできる状況になったときに再開する。「開発可」は未付与で、開発チームは起動しない。
 
-2026-11-09 の [接続検証案](research/external-meeting-test.md) に基づき、アカウント連携 → 入室・退出 → 音声受信の順に分ける。会議を開く協力者は未確認だが、会議に接続しないアカウント連携の準備とは分けて扱う。
+- 実認可: 対象 SHA・日時・結果表示・終了コード・待受の後始末を記録する。`invalid_client` なら Public Client ID の設定・平文とBase64の送信形式、Invalid redirect なら登録URIと動的ポートを確認する。動作済みと仮定しない。
+- 設定: 旧 worktree の `.local/zoom-oauth.env` は承認済みの削除で消えた。再開時は main の同ファイルに Public Client ID を設定できることを確認する。SDK の認証情報とは分ける。
+- 仕様判断: 成功条件（正の `expires_in`、scope欠落も成功など）、エラー表示範囲、リダイレクト・404・400の扱いは未決。実装の存在と仕様の採用を区別して人間と決める（詳細は spec.md と #7）。
+
+アカウント連携の実確認 → 入室・退出 → 音声受信へ進む。会議を開く協力者と外部会議の用途・審査条件は引き続き未確認。
 
 ## 後続 Issue の候補（未登録）
 
@@ -69,6 +79,9 @@ SDK 7.1.5.4434 では本物の認証情報でコールバックが来ない症�
 - 起動係: `開発チーム起動（wacha-meter）`、ID `6ede30fc-0db9-4b31-bab1-18decf0b0005`。無効で作成。有効化はユーザー確認後。
 - 初期準備時の開発依存の監査: minimatch を原因とする moderate 10件。今回の文書更新では再監査していない。詳細は [準備記録](research/setup-status.md)。
 
-- 実認証確認の残件は解消。main の `.local/` に認証情報・SDK 7.2.1・検証プログラムを保持している。秘密の値はチャットや Issue に書かない。
-- 採用済みの改善: 作業時間の集計スクリプトで Orca の `--full` を使う修正は反映済み。次の finish-issue で開発チームが集計の動作を確認する。
+- SDK の実認証確認の残件は解消。main の `.local/` に認証情報・SDK 7.2.1・検証プログラムを保持している。秘密の値はチャットや Issue に書かない。
+- 採用済みの改善: 作業時間の集計スクリプトで Orca の `--full` を使う修正は反映済み。Issue #4 の finish-issue で集計が正常に動き、効果を確認済み。
 - 見送った改善: 実認証など人間の準備が要る確認をレビュー前に行う案、修正担当の指示へ失敗記録を追加する案。同じ問題が再発した場合に再検討する。新しい規則として適用しない（[ふりかえりの記録](issue-reports/issue-1.md)）。
+- Issue #4 で採用済みの改善: 人間への報告後に `待ち` の印を付ける手順を追加済み。次の dual-implement の時間表で、報告後の待ち時間が作業時間に混ざらないか開発チームが確認する。
+- 一般的な Issue の切り方（実装と人間の実確認を常に分けるか）は未決。Issue #7 は今回の明示的な持ち越しを追跡するもので、開発フロー全体は変更しない。
+- Issue #4 の終了コード ADR と PR #6 の強化は保留。後続 Issue の候補には追加しない。再検討のきっかけは Issue #4 レポートに残す。

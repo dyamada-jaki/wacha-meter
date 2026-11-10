@@ -2,11 +2,13 @@
 
 2026-11-07。ユーザーが準備内容の main 反映と Issue #1 の開発チームへの引き渡しを承認。反映結果は docs/next-issues.md に記録する。
 
-## 現在地（2026-11-09 更新）
+## 現在地（2026-11-10 更新）
 
 Issue #1 は完了し、PR #2 を main（`0dd6388`）へ取り込み済み。SDK は **7.2.1.5860（Linux-all の arm64）** を使う。本物の認証情報での認証成功・終了コード0・コンテナの後始末を確認した（2026-11-08 16:02:50 JST、`b015f2b`、許可を受けたワーカーが実行）。会議への参加・音声取得は未実施。
 
-通常の `npm run test` は111件成功、型チェック・Lint・ビルドも成功。main `3ffb2c3` の [CI](https://github.com/dyamada-jaki/wacha-meter/actions/runs/42492740354) が成功している。試作の構成と SDK の選択は [ADR 0001](../decisions/0001-zoom-sdk試作はDocker上のC++とTypeScriptに分ける.md)・[ADR 0002](../decisions/0002-zoom-sdkは7.2.1.5860のarm64を使う.md) に記録済み。検証・後片付けの正本は [Issue #1 レポート](../issue-reports/issue-1.md)。
+Issue #4 の OAuth 連携コマンドは PR #5（main `0bec6f1`）で取り込み済み。169件のテスト・型チェック・Lint・ビルドが成功（開発チーム記録）、取り込み後の [main CI](https://github.com/dyamada-jaki/wacha-meter/actions/runs/42800349130) も成功。本物の OAuth は未実施で、人間の判断により未確認を明示して Issue を閉じた。残件は [Issue #7](https://github.com/dyamada-jaki/wacha-meter/issues/7)。
+
+試作の構成と SDK の選択は ADR 0001・0002、OAuth の Mac 実行と設定の分離は [ADR 0003](../decisions/0003-zoomアカウント連携はmacのnodeで動かし設定は部品ごとに分ける.md) に記録済み。検証・後片付けの正本は [Issue #1 レポート](../issue-reports/issue-1.md)・[Issue #4 レポート](../issue-reports/issue-4.md)。
 
 以下の初期準備の内容・検証表は 2026-11-07 時点の記録として残す。
 
@@ -60,10 +62,10 @@ GitHub の「開発可」「着手中」ラベルを作成し、squash を有効
 
 Orca に `開発チーム起動（wacha-meter）` を無効で作成した。ID は `6ede30fc-0db9-4b31-bab1-18decf0b0005`。15分ごとに着手可能な Issue の有無を調べる設定で、現在は起動しない。他プロジェクトの定期実行は変更していない。
 
-## 引き継ぎと残件（2026-11-09 更新）
+## 引き継ぎと残件（2026-11-10 更新）
 
-- 初期準備と Issue #1 の実装・完了レポートは main へ反映済み。開発チームの後片付けも完了。
+- 初期準備と Issue #1・#4 の実装・レポートは main へ反映済み。開発チームの後片付けも完了。
 - 起動係の定期実行は無効のまま。有効化は未承認。
 - SDK 7.1.5.4434 は実認証のコールバックが返らず、7.2.1.5860 に切り替えて検証済み。今後は 7.2.1.5860 の arm64 を使う。SDK・認証情報・ビルド結果は main の `.local/` に保持（Git 管理外）。
-- 次は外部会議の参加条件と主催者・参加者の協力を確認し、入室・許可を受けた音声取得・退出の検証を具体化する。候補と未決事項は [現在地と次に切る Issue](../next-issues.md)。
+- 本人の OAuth 実認可と未決の振る舞いの採否は Issue #7 に持ち越す。旧 worktree の OAuth 設定ファイルは削除済みで、再開時に main の設定を確認する。その後、外部会議の参加条件と主催者・参加者の協力を確認し、入室・許可を受けた音声取得・退出の検証を具体化する。候補と未決事項は [現在地と次に切る Issue](../next-issues.md)。
 - 初期準備時の `npm audit` は開発依存に moderate 10件を報告した。根は minimatch の globparts amplification（GHSA-g3hv-75wg-m249）。当時の通常更新では解消せず、互換性を変える強制修正は適用していない。この文書更新では再監査していない。
