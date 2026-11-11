@@ -64,6 +64,8 @@ const OBF_FAILED_LABELS = {
   error: 'OBF の要求を完了できませんでした',
 } as const;
 
+const HTTP_ERROR_GUIDE = '会議番号が必要な応答の場合は PO に戻してください。会議番号を追加して再実行しないでください。';
+
 export function describeObfOutcome(outcome: ObfOutcome): string {
   switch (outcome.kind) {
     case 'obf_succeeded':
@@ -74,7 +76,9 @@ export function describeObfOutcome(outcome: ObfOutcome): string {
         outcome.code === undefined ? undefined : `code ${outcome.code}`,
       ].filter((v) => v !== undefined);
       const suffix = detail.length === 0 ? '' : `: ${detail.join(' ')}`;
-      return `OAuth は成功しましたが、OBF トークンを取得できませんでした（${OBF_FAILED_LABELS[outcome.reason]}${suffix}）。成功とは扱いません。`;
+      // HTTP 失敗は会議番号を求められた応答かもしれない。範囲を広げず PO に戻すよう案内する
+      const guide = outcome.reason === 'http_error' ? HTTP_ERROR_GUIDE : '';
+      return `OAuth は成功しましたが、OBF トークンを取得できませんでした（${OBF_FAILED_LABELS[outcome.reason]}${suffix}）。成功とは扱いません。${guide}`;
     }
     case 'interrupted':
       // OBF 要求中の中断では OAuth トークンは取得済みのことがあるので、OBF について伝える

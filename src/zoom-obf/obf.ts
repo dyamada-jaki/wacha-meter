@@ -41,7 +41,11 @@ export async function requestObfToken(input: ObfRequestInput): Promise<ObfResult
       redirect: 'error',
       signal,
     });
-    const body = parseJson(await response.text());
+    const text = await response.text();
+    // 本文を受け取るのとほぼ同時に中断・期限切れになったときも、成功とは扱わない
+    if (input.signal?.aborted === true) return { kind: 'aborted' };
+    if (timeout.aborted) return { kind: 'timeout' };
+    const body = parseJson(text);
     if (response.status !== 200) {
       const code = errorCodeOf(body);
       return { kind: 'http_error', status: response.status, ...(code === undefined ? {} : { code }) };
