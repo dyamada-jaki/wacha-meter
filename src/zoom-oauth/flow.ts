@@ -12,6 +12,8 @@ import { createPkce, createState } from './pkce.js';
 import { exchangeCode } from './token.js';
 
 export interface OAuthFlowOptions {
+  /** 検証済みアクセストークンを保存せず同一プロセス内で使う接続点。 */
+  readonly onAccessToken?: (accessToken: string) => Promise<void>;
   readonly clientId: string;
   readonly authorizeUrl: string;
   readonly tokenUrl: string;
