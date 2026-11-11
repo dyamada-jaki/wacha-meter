@@ -1,6 +1,6 @@
 # 外部会議への接続検証案
 
-外部資料の確認日: 2026-11-09。進捗更新: 2026-11-10。OAuth の実装は取り込み済み。実認可・申請・会議接続は未実施。OAuth のアプリ設定はユーザーが実施（下記）。本人の同席はユーザーが確認済み。Issue #4 のアカウント連携の範囲は spec.md に反映済み。以降の入室・音声受信は検討事項。現在の確定事項は [spec.md](../spec.md)、前段の完了記録は [Issue #1](../issue-reports/issue-1.md)。
+外部資料の再確認日・進捗更新: 2026-11-11。OAuth の実装は取り込み済みで、本人の実認可も成功（Issue #7）。申請・会議接続は未実施。OAuth のアプリ設定はユーザーが実施（下記）。本人の同席はユーザーが確認済み。Issue #4 のアカウント連携の範囲は spec.md に反映済み。以降の入室・音声受信は検討事項。現在の確定事項は [spec.md](../spec.md)、前段の完了記録は [Issue #1](../issue-reports/issue-1.md)。
 
 ## 今回分かったこと
 
@@ -8,7 +8,7 @@
 |---|---|---|
 | SDK 認証と外部会議参加 | SDK の JWT に加え、アプリを OAuth で許可した参加者に紐付く OBF トークンを使う。本人の入室前は参加できず、本人が退出すると SDK セッションも終了する | #1 の認証成功だけでは外部会議には入れない。ご自身も同席する形で試す（ユーザー確認済み） |
 | 外部会議のベータテスト | Request to Share の承認後、認可 URL を外部の主催者へ共有する手順がある。Technical Design とセキュリティ資料等の提出が必要 | 会議 URL と主催者の口頭許可だけでは準備完了にならない |
-| ローカルの OAuth | Public Client OAuth / PKCE と loopback redirect により、Mac 上のブラウザからローカルの一時 HTTP サーバーへ認可応答を戻せる | 公開サーバー・有料トンネルを前提にせずアカウント連携を試せる。Public Client OAuth と loopback redirect はユーザーが設定済み。実認可は未検証 |
+| ローカルの OAuth | Public Client OAuth / PKCE と loopback redirect により、Mac 上のブラウザからローカルの一時 HTTP サーバーへ認可応答を戻せる | 公開サーバー・有料トンネルを前提にせずアカウント連携を試せる。Public Client OAuth と loopback redirect はユーザーが設定済み。実認可は2026-11-11に成功（本人報告） |
 | OBF 取得 API | `GET /v2/users/me/token?type=onbehalf`。粒度の細かいユーザー用スコープは `user:read:token`。API は `meeting_id` パラメーターも持つ | SDK の Client Secret だけで代用しない。対象会議とアプリ設定に合わせて取得を検証する |
 
 根拠: [OBF 認証](https://developers.zoom.us/docs/meeting-sdk/auth/obf/)、[認証変更 FAQ](https://godevelopers.zoom.us/docs/meeting-sdk/obf-faq/)、[外部ベータテスト](https://godevelopers.zoom.us/docs/distribute/sharing-private-and-beta-apps/)、[OAuth / PKCE / loopback](https://developers.zoom.us/docs/integrations/oauth/)、[Users API](https://developers.zoom.us/docs/api/users/)。
@@ -42,7 +42,7 @@ PO の提案は、本人が同席する OBF 経路を検証候補に絞り、ア
 設定状況と検証への引き継ぎ:
 
 - 本人の同席は確認済み。Zoom の実際のログイン・アプリ許可は検証時に本人が行う。
-- Public Client OAuth を ON にし、Redirect URL for OAuth と OAuth Allow List に `http://127.0.0.1/callback` を設定済み（ユーザー報告。実際の OAuth は未検証）。
+- Public Client OAuth を ON にし、Redirect URL for OAuth と OAuth Allow List に `http://127.0.0.1/callback` を設定済み（ユーザー報告。実際の OAuth は2026-11-11に成功（本人報告））。
 - `user:read:token` もユーザーが追加済み。ユーザー認可は Public Client OAuth / PKCE で行う。既存の SDK 認証用 Client ID と OAuth の Public Client ID を混同しない。Public Client ID の設定手順は `prototypes/zoom/README.md` に用意済み。旧 worktree の設定ファイルは削除済みなので、再開時に main の設定を確認する。
 - 計画承認済みの待機は既定180秒（30〜600秒）、実認可の成功確認は最大3回。ログイン・許可操作は人間が行い、秘密の値をチャットへ貼らない。
 
@@ -57,7 +57,7 @@ PO の提案は、本人が同席する OBF 経路を検証候補に絞り、ア
 
 スコープ外: 会議参加、OBF を使った入室成功の判定、音声取得、採点、結果画面、外部配布、課金、ベータ共有申請の送信。
 
-Issue #4 は PR #5（main `0bec6f1`）を取り込み、人間の判断で実認可未確認のままクローズした。上記の受け入れ条件1を合格と扱わない。実認可と追加の振る舞いの採否は [Issue #7](https://github.com/dyamada-jaki/wacha-meter/issues/7) に持ち越し、本人がテストできるときに再開する。詳細は [Issue #4 レポート](../issue-reports/issue-4.md)。この取り込みはボット用途・外部会議参加の承認を代替しない。
+Issue #4 は PR #5（main `0bec6f1`）を取り込み、人間の判断で実認可未確認のままクローズした。クローズ時点では上記の受け入れ条件1は未確認だった。[Issue #7](https://github.com/dyamada-jaki/wacha-meter/issues/7) で2026-11-11にトークン取得成功・終了コード0を本人が報告した。追加の振る舞いの採否は引き続き未決。詳細は [Issue #4 レポート](../issue-reports/issue-4.md)。この取り込みはボット用途・外部会議参加の承認を代替しない。
 
 OAuth を Mac の Node.js で実行し、設定を部品ごとに分ける判断は [ADR 0003](../decisions/0003-zoomアカウント連携はmacのnodeで動かし設定は部品ごとに分ける.md) として採用済み。成功条件・エラー表示・リダイレクト・404・400の扱いは、実装されているが仕様としての採否は未決。
 
@@ -67,3 +67,34 @@ OAuth を Mac の Node.js で実行し、設定を部品ごとに分ける判断
 - 許可を受けた音声受信: 音声取得の権限、許可前・拒否・取消時の扱い、受信の証拠、保存条件を決めてから実装する。入室成功だけで区切り1の達成としない。
 
 [ADR 0001](../decisions/0001-zoom-sdk試作はDocker上のC++とTypeScriptに分ける.md)・[ADR 0002](../decisions/0002-zoom-sdkは7.2.1.5860のarm64を使う.md) を引き継ぐ。手元の 7.2.1.5860 のヘッダーに入室状態・待機室状態と OBF 関連の入力欄があることは確認したが、具体的な入力欄の選択と実 SDK での動作は実装計画・検証で確かめる。
+
+## 2026-11-11 再確認と次の具体案（未採用）
+
+### 調査結果
+
+- [OBF 専用資料](https://developers.zoom.us/docs/meeting-sdk/auth/obf/) は、ユーザー認可 → Users API で OBF 取得 → SDK に渡して参加、の経路と、本人の同席・退出への追従を説明している。外部会議についてはアプリ審査も要求している。
+- [ベータ共有手順](https://godevelopers.zoom.us/docs/distribute/sharing-private-and-beta-apps/) は、Production → Beta Test → Request to Share の承認後、外部の主催者に認可 URL を共有するよう説明している。Technical Design、SSDLC、SAST・DAST の実スキャン証跡、Privacy Policy 等が必要。OAuth 成功だけでこの条件は満たさない。現在のアプリの申請状態は未確認。開発用と本番用の設定を混同しない。
+- [SDK 概要](https://developers.zoom.us/docs/meeting-sdk/) のボット非対応という記載と、OBF 専用資料のボット参加という記載は今回も併存している。本アプリの用途が承認されるかは未確認のまま。以前参照した OBF FAQ は今回404で取得できず、現行の根拠に用いない。
+- [Users API](https://developers.zoom.us/docs/api/users/) の `GET /users/{userId}/token` は、ユーザー用の `me`、`type=onbehalf`、`user:read:token` を記載。`meeting_id` は必須表示のないパラメーター。取得自体の成功と、そのトークンによる対象会議への参加成功は別々に検証する。
+- [公式比較記事](https://developers.zoom.us/blog/app-attribution-path/) は OBF の SDK 利用を無料としている。追加課金サービスは引き続き前提にしない。
+
+### 次の開発候補: OBF 取得だけを確かめる
+
+目的は、本人の OAuth 認可から参加用トークンの取得までつながるかを確認すること。会議を開く協力者や外部ベータ承認の準備と並行できる、という PO の提案。OBF 取得は用途承認を代替しない。新規 Issue の範囲として人間が採用してから spec.md と Issue に反映し、開発チームに渡す。
+
+受け入れ条件案:
+
+1. Mac 上でブラウザ認可を行い、同一プロセス内で得たアクセストークンを使って `GET https://api.zoom.us/v2/users/me/token?type=onbehalf` を要求する。会議番号はこの検証では指定しない案とし、必須となる結果が出たら失敗を記録して計画を見直す。
+2. HTTP 200 と空でない OBF トークンを確認できた場合だけ「OBF 取得成功」と表示する。OAuth だけ成功した場合、権限不足、期限切れ、不正な応答、通信失敗、中断は OBF 成功と扱わない。
+3. OAuth・OBF とも値はメモリだけで扱い、画面・ログ・引数・環境変数・ファイルへ出さず、終了時に破棄する。API の応答全体を表示しない。具体的なエラー表示と期限は計画時に示す。
+4. 正常・失敗・中断で一時待受を閉じる。既存の `zoom:oauth` と SDK 認証コマンドを維持し、既定の確認コマンドを通す。
+5. 自動テストと本人による実 API の結果を分けて記録する。未実施を成功としない。人間の実認可は PR 作成の前提にしない。
+
+スコープ外: SDK へのトークン受け渡し、会議の入室・退出、音声取得、保存・自動更新、外部配布・申請送信・課金。コマンド名やコード構成は開発チームの計画で決める。現在の `token.ts` はトークン値を外へ返さず要約だけを返すため、秘密を保ったまま次の API へつなぐ設計が必要。
+
+### 入室・退出の検証に進むために
+
+- 人間: 5〜10分のテスト会議を主催できる協力者の有無を確認する（今回質問中）。会議の URL・パスコードを公開 Issue に書かない。
+- PO と人間: Marketplace の Beta Test / Request to Share の現在の状態と不足資料を確認する。用途は「参加者として入り、許可された音声から会議全体の活発さを測る」と正確に伝えられる形にする。現在は画面未確認・申請未送信。
+- 開発計画: SDK 7.2.1.5860 の `JoinParam4WithoutLogin` に `onBehalfToken` があることをローカルのヘッダーで再確認した。具体的な呼び出し方、Mac から Docker への値の渡し方、待機室・拒否・本人退出・ホスト終了時の扱いを詰める。入室成功はまだ検証していない。
+- 最初の会議では参加者一覧に本人と別の「わちゃメーター」が表示され、退出できることを確認する。音声受信は次段階。
