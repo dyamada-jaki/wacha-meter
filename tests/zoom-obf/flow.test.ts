@@ -48,9 +48,13 @@ const SUMMARY = { tokenType: 'bearer', expiresIn: 3599, scope: 'user:read:token'
 async function run(options: RunOptions = {}) {
   const browser = createFakeBrowser(options.browser ?? 'approve');
   tokenApi = await startFakeTokenApi(options.token ?? 'ok', browser.seen);
-  usersApi = await startFakeUsersApi(options.obf ?? 'ok');
   const logs: string[] = [];
   let address: { address: string; port: number } | undefined;
+  // OBF の要求を受け取った時点で、OAuth の待受（callback のポート）が閉じていたか
+  const callbackClosedAtRequest: boolean[] = [];
+  usersApi = await startFakeUsersApi(options.obf ?? 'ok', async () => {
+    callbackClosedAtRequest.push(address !== undefined && (await connectionRefused(address.port)));
+  });
   const outcome = await runObfFlow({
     clientId: FAKE_CLIENT_ID,
     authorizeUrl: 'https://zoom.example/oauth/authorize',
@@ -82,6 +86,7 @@ async function run(options: RunOptions = {}) {
     logs,
     tokenRequests,
     obfRequests: usersApi.requests(),
+    callbackClosedAtRequest,
     verifier: tokenRequests[0]?.form.get('code_verifier'),
   };
 }
@@ -114,6 +119,7 @@ describe('runObfFlow: 成功', () => {
       { method: 'GET', url: OBF_PATH, authorization: `Bearer ${FAKE_ACCESS_TOKEN}` },
     ]);
     expect(r.closed).toBe(true);
+    expect(r.callbackClosedAtRequest).toEqual([true]);
     expectNoSecrets(r.output, r.verifier);
   });
 

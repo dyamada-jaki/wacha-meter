@@ -10,7 +10,7 @@
 //   一致するときだけトークンを返す。
 
 import { createHash } from 'node:crypto';
-import { createServer, type IncomingMessage, type Server } from 'node:http';
+import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { connect, type AddressInfo } from 'node:net';
 
 export const FAKE_CLIENT_ID = 'fake-public-client-id-Q7x';
@@ -293,7 +293,13 @@ export interface FakeUsersApi {
   readonly close: () => Promise<void>;
 }
 
-export async function startFakeUsersApi(behavior: ObfBehavior): Promise<FakeUsersApi> {
+/**
+ * beforeRespond: OBF の要求を受け取ったとき、応答する前に待つ処理（要求の時点の状態を確かめるため）
+ */
+export async function startFakeUsersApi(
+  behavior: ObfBehavior,
+  beforeRespond?: () => Promise<void>,
+): Promise<FakeUsersApi> {
   const requests: ObfRequestRecord[] = [];
   const redirected: ObfRequestRecord[] = [];
   const record = (req: IncomingMessage): ObfRequestRecord => ({
@@ -312,6 +318,10 @@ export async function startFakeUsersApi(behavior: ObfBehavior): Promise<FakeUser
 
   const server: Server = createServer((req, res) => {
     requests.push(record(req));
+    if (beforeRespond === undefined) return respond(req, res);
+    void beforeRespond().then(() => respond(req, res));
+  });
+  const respond = (req: IncomingMessage, res: ServerResponse): void => {
     const json = (status: number, value: unknown) => {
       res.writeHead(status, { 'content-type': 'application/json' });
       res.end(JSON.stringify(value));
@@ -356,7 +366,7 @@ export async function startFakeUsersApi(behavior: ObfBehavior): Promise<FakeUser
         setTimeout(() => res.destroy(), 20);
         return;
     }
-  });
+  };
   await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
   const { port } = server.address() as AddressInfo;
   const closeServer = (s: Server) =>
