@@ -76,6 +76,9 @@ export function describeObfOutcome(outcome: ObfOutcome): string {
       const suffix = detail.length === 0 ? '' : `: ${detail.join(' ')}`;
       return `OAuth は成功しましたが、OBF トークンを取得できませんでした（${OBF_FAILED_LABELS[outcome.reason]}${suffix}）。成功とは扱いません。`;
     }
+    case 'interrupted':
+      // OBF 要求中の中断では OAuth トークンは取得済みのことがあるので、OBF について伝える
+      return '中断しました。OBF トークンは取得していません（トークンは保存していません）。';
     default:
       return describeOutcome(outcome);
   }
