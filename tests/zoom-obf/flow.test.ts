@@ -200,9 +200,14 @@ describe('runObfFlow: OAuth だけの成功や OBF の失敗を OBF 成功と扱
 
   it('OBF 要求中に中断されたら中断（終了コード 130）', async () => {
     const controller = new AbortController();
-    // 認可とトークン取得は速く、偽 Users API は 2 秒待たせるので、OBF 要求中に中断が届く
-    setTimeout(() => controller.abort(), 400);
-    const r = await run({ obf: 'slow', signal: controller.signal });
+    // 偽 Users API が OBF の要求を受け取ってから（応答は 2 秒待たせる）中断する。固定の時間に頼らない
+    const watcher = setInterval(() => {
+      if ((usersApi?.requests().length ?? 0) > 0) {
+        clearInterval(watcher);
+        controller.abort();
+      }
+    }, 10);
+    const r = await run({ obf: 'slow', signal: controller.signal }).finally(() => clearInterval(watcher));
     expect(r.outcome).toEqual({ kind: 'interrupted' });
     expect(r.exitCode).toBe(130);
     expect(r.obfRequests).toHaveLength(1);

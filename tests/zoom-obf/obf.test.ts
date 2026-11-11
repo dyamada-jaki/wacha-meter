@@ -57,6 +57,13 @@ describe('toObfOutcome: OAuth の結果から OBF 確認の結果へ', () => {
 });
 
 describe('describeObfOutcome', () => {
+  it('中断の文言は、OAuth の段階で取得済みでも食い違わないように「OBF トークンは取得していない」と伝える', () => {
+    const text = describeObfOutcome({ kind: 'interrupted' });
+    expect(text).toContain('中断しました');
+    expect(text).toContain('OBF トークンは取得していません');
+    expect(text).toContain('保存');
+  });
+
   it('成功の文言は、会議に参加していないことと、トークンを保存しないことを伝える', () => {
     const text = describeObfOutcome({ kind: 'obf_succeeded', token: SUMMARY });
     expect(text).toContain('OBF トークンを取得しました');
