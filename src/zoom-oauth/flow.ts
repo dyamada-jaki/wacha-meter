@@ -86,34 +86,41 @@ export async function runOAuthFlow(options: OAuthFlowOptions): Promise<OAuthOutc
 
   await listen(server);
   const { address, port } = server.address() as AddressInfo;
-  options.onListening?.({ address, port });
   const redirectUri = `http://${LOOPBACK_HOST}:${port}${CALLBACK_PATH}`;
-
-  const timer = setTimeout(() => finish({ kind: 'timeout' }), options.timeoutMs);
+  let timer: ReturnType<typeof setTimeout> | undefined;
   const onAbort = (): void => finish({ kind: 'aborted' });
-  options.signal?.addEventListener('abort', onAbort, { once: true });
+  let result: Waited;
+  try {
+    options.onListening?.({ address, port });
+    timer = setTimeout(() => finish({ kind: 'timeout' }), options.timeoutMs);
+    options.signal?.addEventListener('abort', onAbort, { once: true });
+    // listen完了までの中断も取りこぼさない。
+    if (isAborted(options.signal)) onAbort();
 
-  options.log(
-    `${LOOPBACK_HOST}:${port} で認可の応答を待っています（最大 ${Math.round(options.timeoutMs / 1000)} 秒。Ctrl+C で中断）。`,
-  );
-  const url = buildAuthorizeUrl({
-    authorizeUrl: options.authorizeUrl,
-    clientId: options.clientId,
-    redirectUri,
-    codeChallenge: pkce.challenge,
-    state,
-  });
-  options.openBrowser(url).then(
-    () => {
-      if (!settled) options.log('ブラウザで Zoom の認可画面を開きました。ログインして、アプリを許可してください。');
-    },
-    () => finish({ kind: 'browser_failed' }),
-  );
-
-  const result = await waited;
-  clearTimeout(timer);
-  options.signal?.removeEventListener('abort', onAbort);
-  await close(server);
+    options.log(
+      `${LOOPBACK_HOST}:${port} で認可の応答を待っています（最大 ${Math.round(options.timeoutMs / 1000)} 秒。Ctrl+C で中断）。`,
+    );
+    if (!settled) {
+      const url = buildAuthorizeUrl({
+        authorizeUrl: options.authorizeUrl,
+        clientId: options.clientId,
+        redirectUri,
+        codeChallenge: pkce.challenge,
+        state,
+      });
+      options.openBrowser(url).then(
+        () => {
+          if (!settled) options.log('ブラウザで Zoom の認可画面を開きました。ログインして、アプリを許可してください。');
+        },
+        () => finish({ kind: 'browser_failed' }),
+      );
+    }
+    result = await waited;
+  } finally {
+    clearTimeout(timer);
+    options.signal?.removeEventListener('abort', onAbort);
+    await close(server);
+  }
   options.log('待受を閉じました。');
 
   switch (result.kind) {
@@ -142,6 +149,7 @@ export async function runOAuthFlow(options: OAuthFlowOptions): Promise<OAuthOutc
   options.log('認可の応答を受け取りました。トークンを要求します。');
   const token = await exchangeCode({
     tokenUrl: options.tokenUrl,
+    ...(options.onAccessToken === undefined ? {} : { onAccessToken: options.onAccessToken }),
     clientId: options.clientId,
     code: callback.code,
     redirectUri,

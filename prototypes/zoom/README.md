@@ -1,6 +1,6 @@
 # Zoom 接続試作の準備
 
-目的は、今の Mac 上で「わちゃメーター」が独立した参加者として入室し、主催者の許可を受けて音声を取得すること。現在は SDK の初期化・認証を確かめる検証プログラム（[Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1)）と、本人の Zoom アカウントで OAuth を許可してトークン取得を確かめるコマンド（[Issue #4](https://github.com/dyamada-jaki/wacha-meter/issues/4)）まで。会議参加プログラムは未実装。
+目的は、今の Mac 上で「わちゃメーター」が独立した参加者として入室し、主催者の許可を受けて音声を取得すること。現在は SDK の初期化・認証を確かめる検証プログラム（[Issue #1](https://github.com/dyamada-jaki/wacha-meter/issues/1)）と、本人の Zoom アカウントで OAuth を許可してトークン取得を確かめるコマンド（[Issue #4](https://github.com/dyamada-jaki/wacha-meter/issues/4)）に加え、OAuth に続けて OBF の取得を確認するコマンド（[Issue #8](https://github.com/dyamada-jaki/wacha-meter/issues/8)）を用意した。会議参加プログラムは未実装。
 
 ## SDK の受領と引き継ぎ
 
@@ -186,6 +186,65 @@ SDK 用の `ZOOM_SDK_CLIENT_ID` / `ZOOM_SDK_CLIENT_SECRET`（`.local/zoom-creden
 ### 自動テストとの分担
 
 `tests/zoom-oauth/` は、Zoom の認可画面（ブラウザ操作）とトークン API だけを偽物にし、一時サーバー・HTTP・PKCE の計算は実物で確かめる（CI でも動く）。本物の Zoom でのログイン・許可・トークン取得は、上の手順で人間が確かめ、自動テストとは別に記録する。
+
+## OAuth に続く OBF トークンの取得確認（Issue #8）
+
+Mac の Node.js 24 上で、本人の OAuth 許可から参加用 OBF トークンの取得までを同一プロセスで行う。**取得成功は会議への参加資格・入室成功を意味しない。** Docker・SDK・会議への接続は行わない。
+
+### 設定と実行（人間が行う）
+
+上の「Public Client ID の設定」と同じ `.local/zoom-oauth.env` の `ZOOM_OAUTH_CLIENT_ID` を使う。Public Client OAuth（PKCE S256）、戻り先 `http://127.0.0.1/callback`、`user:read:token` を確認する。SDK 用の設定は読まず、新しい設定ファイルも不要。以前の `zoom:oauth` が成功していてもトークンを保存していないため、今回も本人が認可する。
+
+```sh
+# 対象を記録する（秘密値は表示しない）
+git rev-parse HEAD
+node --version
+date '+%Y-%m-%d %H:%M:%S %Z'
+
+# 認可から OBF 取得まで1回だけ実行
+npm run zoom:obf
+# 必要なら認可を待つ時間だけを変える
+# npm run zoom:obf -- --timeout 300
+
+# 終了直後に確認する
+echo $?
+```
+
+1. 本人がコマンドを実行し、開いたブラウザでログインして許可する。エージェントは本物の OAuth / OBF を実行しない。
+2. callback の画面を閉じてターミナルへ戻る。「OBF トークンを取得しました」と終了コード `0` がそろう場合だけ取得成功。OAuth の認可成功だけでは合格にしない。
+3. 待受開始時に表示された `127.0.0.1:<ポート>` と「待受を閉じました」を確認する。終了後、Mac で `nc -z 127.0.0.1 <ポート>` を実行し、直後の `echo $?` が非0で接続できないことを確かめる。コマンドがシェルへ戻って終了したことも記録する（同じポートで別プロセスが待ち受けていたら、推測せず未確認として相談する）。
+4. 下の記録欄を埋めて PO に伝える。最後の安全な結果表示と終了コードだけを共有し、認可 URL・ブラウザのアドレス欄・認可コード・API の生レスポンス・トークン・設定値は貼らない。
+
+人間による実確認は**最大3回**。自動では再試行せず、各回の結果を記録する。3回で成功しなければ PO に戻す。会議番号が必要な応答が判明した場合は途中でも止め、会議番号を追加せず PO と範囲を見直す。生の `message` をコマンドが表示しないため、HTTP 状態や安全な数値 code だけで会議番号必須と断定しない。必要な原因確認は本人と PO が行う。
+
+### 処理・期限・安全な表示
+
+- 認可 callback の待機は既定180秒、`--timeout` は30〜600秒。ブラウザ起動は10秒、OAuth のトークン交換と OBF 要求はそれぞれ15秒（応答本文の受信まで）。Ctrl+C で中断できる。
+- OAuth の一時待受を閉じ、HTTP 200・空でない access_token・bearer・正の expires_in を検証した後だけ、アクセストークンをメモリ内の接続点へ渡す。
+- 要求は `GET https://api.zoom.us/v2/users/me/token?type=onbehalf`、Bearer 認証。会議番号を指定せず、リダイレクトには追従しない。HTTP 200 かつ JSON の `token` が空でない文字列の場合だけ OBF 成功。根拠: [Zoom Users API「Get a user's token」](https://godevelopers.zoom.us/docs/api/users/#get-a-users-token)（2026-11-11確認）。
+- OAuth / refresh / OBF トークンを画面・ログ・引数・環境変数・ファイルへ出さない。プロセス内のメモリのみで扱い、終了時に破棄する。保存・自動更新なし。`zoom:obf` の結果には OAuth の種類・scope も表示しない。既存の `zoom:oauth` の要約表示は維持する。
+- OBF の失敗は段階・固定の区分・HTTP 状態を表示。Zoom の `code` が0〜999999の整数の場合だけ数値も表示する（例: `HTTP 401 code 124`）。`message`・`reason`・応答全体・自由文の code は表示しない。HTTP 失敗には会議番号が必要な場合に PO へ戻す固定案内を添える。
+
+| 終了コード | 意味 |
+|---|---|
+| 0 | OBF 取得成功 |
+| 1 | OAuth / OBF の不正応答・HTTP / 通信失敗・ブラウザ失敗・API 要求の時間切れ（本文待ちを含む） |
+| 2 | 設定・引数の誤り（認可は開始しない） |
+| 3 | 本人が OAuth を拒否 |
+| 4 | 認可 callback を待つ時間の上限 |
+| 130 / 143 | SIGINT（Ctrl+C）/ SIGTERM による中断 |
+
+### 自動テストと実 API 確認の記録
+
+`tests/zoom-obf/` は、実物の CLI・OAuth・PKCE・loopback・HTTP / fetch をローカルの偽 Zoom と組み合わせる。HTTP / token / code の境界、秘密入り応答と例外、本文待ちの期限と中断、待受の終了を検証する。Node の実子プロセスでも成功・失敗・SIGINT / SIGTERM・不正な URL の扱いを確認する。通信の偽物は本物の Zoom の動作確認を代替しない。
+
+本物の OAuth / OBF は**未実施**。自動検証だけで実 API の取得成功や Issue 完了とは扱わない。PR 作成を本人の操作待ちにはせず、レビュー時に本人が下表を記録する。3行は試行上限の記録欄であり、成功後に残りを実行する必要はない。
+
+| 試行 | 状態・対象 SHA | 日時（タイムゾーン込み） | 環境（macOS / Node） | 最後の安全な結果表示・終了コード | 待受を閉じた表示 / ポート接続不可 / プロセス終了 |
+|---|---|---|---|---|---|
+| 1 | 未実施 | — | — | — | — |
+| 2 | 未実施 | — | — | — | — |
+| 3 | 未実施 | — | — | — | — |
 
 ## SDK 入手手順（今回の取得は完了）
 

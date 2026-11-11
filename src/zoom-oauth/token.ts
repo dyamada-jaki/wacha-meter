@@ -1,6 +1,6 @@
 // 認可コードを Zoom のトークン API でトークンに交換する（公開クライアント: Secret なし、body に client_id）。
 // トークンの値は返さない。成功したかと、表示してよい情報（種類・有効期間・スコープ）だけを返す。
-// アクセストークン・リフレッシュトークンはこの関数の中だけで扱い、保存も更新もしない。
+// アクセストークンは任意の接続点で同一プロセス内の次のAPIへ渡せる。保存も更新もしない。
 
 import { SAFE_ERROR_CODE } from './callback.js';
 
@@ -21,6 +21,8 @@ export type TokenResult =
   | { readonly kind: 'aborted' };
 
 export interface ExchangeCodeInput {
+  /** 検証済みの値をメモリ内でのみ使う。戻り値には含めない。 */
+  readonly onAccessToken?: (accessToken: string) => Promise<void>;
   readonly tokenUrl: string;
   readonly clientId: string;
   readonly code: string;
@@ -44,6 +46,8 @@ export function summarizeTokenResponse(body: unknown): TokenSummary | undefined 
 }
 
 export async function exchangeCode(input: ExchangeCodeInput): Promise<TokenResult> {
+  if (isAborted(input.signal)) return { kind: 'aborted' };
+  let validated: { token: TokenSummary; accessToken: string };
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = input.signal === undefined ? timeout : AbortSignal.any([input.signal, timeout]);
   try {
@@ -67,12 +71,18 @@ export async function exchangeCode(input: ExchangeCodeInput): Promise<TokenResul
       return { kind: 'http_error', status: response.status, ...(errorCode === undefined ? {} : { errorCode }) };
     }
     const token = summarizeTokenResponse(body);
-    return token === undefined ? { kind: 'malformed' } : { kind: 'ok', token };
+    if (token === undefined) return { kind: 'malformed' };
+    if (isAborted(input.signal)) return { kind: 'aborted' };
+    if (timeout.aborted) return { kind: 'timeout' };
+    validated = { token, accessToken: (body as { access_token: string }).access_token };
   } catch {
-    if (input.signal?.aborted === true) return { kind: 'aborted' };
+    if (isAborted(input.signal)) return { kind: 'aborted' };
     if (timeout.aborted) return { kind: 'timeout' };
     return { kind: 'network_error' };
   }
+  // 後続APIは自身の期限を持つ。例外は通信例外に読み替えず呼び出し側で処理する。
+  await input.onAccessToken?.(validated.accessToken);
+  return { kind: 'ok', token: validated.token };
 }
 
 function parseJson(text: string): unknown {
@@ -89,3 +99,5 @@ function errorCodeOf(body: unknown): string | undefined {
   const { error } = body as Record<string, unknown>;
   return typeof error === 'string' && SAFE_ERROR_CODE.test(error) ? error : undefined;
 }
+
+function isAborted(signal: AbortSignal | undefined): boolean { return signal?.aborted === true; }

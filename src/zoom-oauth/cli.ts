@@ -31,7 +31,7 @@ type ParsedArgs =
   | { readonly ok: true; readonly timeoutSeconds: number }
   | { readonly ok: false; readonly message: string };
 
-function parseArgs(argv: readonly string[]): ParsedArgs {
+export function parseArgs(argv: readonly string[]): ParsedArgs {
   let timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -54,7 +54,7 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
 type ClientIdResult = { readonly ok: true; readonly clientId: string } | { readonly ok: false; readonly message: string };
 
 /** Public Client ID を読む。エラー文には値を含めない */
-function readPublicClientId(env: Readonly<Record<string, string | undefined>>): ClientIdResult {
+export function readPublicClientId(env: Readonly<Record<string, string | undefined>>): ClientIdResult {
   const value = env[PUBLIC_CLIENT_ID_VARIABLE];
   if (value === undefined || value.trim() === '') {
     return { ok: false, message: `${PUBLIC_CLIENT_ID_VARIABLE} が設定されていません。` };

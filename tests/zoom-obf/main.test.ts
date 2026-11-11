@@ -37,7 +37,13 @@ globalThis.fetch = async (url, init) => {
     return new Response(JSON.stringify({ access_token: '${ACCESS}', refresh_token: '${REFRESH}', token_type: 'bearer', expires_in: 3599, scope: '${MESSAGE}' }));
   }
   if (url === 'https://api.zoom.us/v2/users/me/token?type=onbehalf' && init.method === 'GET' && new Headers(init.headers).get('authorization') === 'Bearer ${ACCESS}') {
-    if (process.env.FAKE_OBF_MODE === 'hold') return new Promise((_, reject) => init.signal.addEventListener('abort', () => reject(new Error('${MESSAGE}')), { once: true }));
+    if (process.env.FAKE_OBF_MODE === 'hold') return new Promise((_, reject) => {
+      // 実fetchの接続と同じくプロセスを生かす。PromiseだけではNodeがcode13で終了してしまう。
+      const timer = setTimeout(() => reject(new Error('${MESSAGE}')), 60000);
+      const fail = () => { clearTimeout(timer); reject(new Error('${MESSAGE}')); };
+      if (init.signal.aborted) fail();
+      else init.signal.addEventListener('abort', fail, { once: true });
+    });
     return new Response(JSON.stringify({ token: '${OBF}', code: 124, message: '${MESSAGE}' }), { status: process.env.FAKE_OBF_MODE === 'fail' ? 401 : 200 });
   }
   if (new URL(url).hostname !== '127.0.0.1') throw new Error('${MESSAGE}');
