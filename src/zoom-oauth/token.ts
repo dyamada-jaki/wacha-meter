@@ -1,6 +1,7 @@
 // 認可コードを Zoom のトークン API でトークンに交換する（公開クライアント: Secret なし、body に client_id）。
 // トークンの値は返さない。成功したかと、表示してよい情報（種類・有効期間・スコープ）だけを返す。
-// アクセストークン・リフレッシュトークンはこの関数の中だけで扱い、保存も更新もしない。
+// アクセストークンは、指定された後続処理（useAccessToken）の引数として渡すだけで、戻り値に含めない。
+// リフレッシュトークンは使わずに捨てる。保存も更新もしない。
 
 import { SAFE_ERROR_CODE } from './callback.js';
 
@@ -55,6 +56,26 @@ export function summarizeTokenResponse(body: unknown): TokenSummary | undefined 
 }
 
 export async function exchangeCode<U = never>(input: ExchangeCodeInput<U>): Promise<TokenResult<U>> {
+  const exchanged = await requestToken(input);
+  if (exchanged.kind !== 'ok') return exchanged;
+  const { token, accessToken } = exchanged;
+  if (input.useAccessToken === undefined) return { kind: 'ok', token };
+  // トークン要求の上限・例外の扱いとは分けて、後続処理を呼ぶ。例外は値を含みうるので、投げたことだけを返す
+  let used: UseResult<U>;
+  try {
+    used = { kind: 'returned', value: await input.useAccessToken(accessToken, input.signal) };
+  } catch {
+    used = { kind: 'threw' };
+  }
+  return { kind: 'ok', token, used };
+}
+
+type Requested =
+  | { readonly kind: 'ok'; readonly token: TokenSummary; readonly accessToken: string }
+  | Exclude<TokenResult, { readonly kind: 'ok' }>;
+
+/** トークン API を呼ぶ。アクセストークンはこのモジュールの中でだけ返す */
+async function requestToken(input: ExchangeCodeInput<unknown>): Promise<Requested> {
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = input.signal === undefined ? timeout : AbortSignal.any([input.signal, timeout]);
   try {
@@ -78,7 +99,8 @@ export async function exchangeCode<U = never>(input: ExchangeCodeInput<U>): Prom
       return { kind: 'http_error', status: response.status, ...(errorCode === undefined ? {} : { errorCode }) };
     }
     const token = summarizeTokenResponse(body);
-    return token === undefined ? { kind: 'malformed' } : { kind: 'ok', token };
+    if (token === undefined) return { kind: 'malformed' };
+    return { kind: 'ok', token, accessToken: (body as { access_token: string }).access_token };
   } catch {
     if (input.signal?.aborted === true) return { kind: 'aborted' };
     if (timeout.aborted) return { kind: 'timeout' };

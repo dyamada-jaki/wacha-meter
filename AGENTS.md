@@ -23,10 +23,11 @@
 - `npm run build` — TypeScript のビルド
 - `npm run zoom:init` / `npm run zoom:auth` — Zoom SDK の初期化・認証の手元確認（Docker と Git 管理外の SDK が必要。CI では実行しない。prototypes/zoom/README.md）
 - `npm run zoom:oauth` — Zoom アカウント連携（OAuth・PKCE）の手元確認。ブラウザで本人がログイン・許可する（Git 管理外の `.local/zoom-oauth.env` が必要。CI では実行しない。prototypes/zoom/README.md）
+- `npm run zoom:obf` — OAuth に続けて本人の OBF トークン取得の手元確認（会議番号なし・会議には参加しない）。設定は `zoom:oauth` と同じ `.local/zoom-oauth.env`。CI では実行しない。prototypes/zoom/README.md
 
 ## ディレクトリ構成
 ```
-src/           TypeScript のコード（zoom-auth/: SDK 初期化・認証の検証コマンド、zoom-oauth/: アカウント連携の OAuth 確認コマンド）
+src/           TypeScript のコード（zoom-auth/: SDK 初期化・認証の検証コマンド、zoom-oauth/: アカウント連携の OAuth 確認コマンド、zoom-obf/: OAuth に続く OBF 取得の確認コマンド）
 tests/         Vitest のテスト
 prototypes/zoom/  Zoom 接続試作の環境・手順と C++ の検証プログラム（auth-probe/）
 docs/

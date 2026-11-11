@@ -24,10 +24,50 @@ export interface ObfRequestInput {
 }
 
 /** OBF 応答の本文が成功の形（token が空でない文字列）か */
-export function isObfTokenResponse(_body: unknown): boolean {
-  throw new Error('未実装');
+export function isObfTokenResponse(body: unknown): boolean {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return false;
+  const { token } = body as Record<string, unknown>;
+  return typeof token === 'string' && token !== '';
 }
 
-export function requestObfToken(_input: ObfRequestInput): Promise<ObfResult> {
-  throw new Error('未実装');
+export async function requestObfToken(input: ObfRequestInput): Promise<ObfResult> {
+  const timeout = AbortSignal.timeout(input.timeoutMs);
+  const signal = input.signal === undefined ? timeout : AbortSignal.any([input.signal, timeout]);
+  try {
+    const response = await fetch(input.url, {
+      method: 'GET',
+      headers: { authorization: `Bearer ${input.accessToken}`, accept: 'application/json' },
+      // リダイレクト先にアクセストークンを送らない
+      redirect: 'error',
+      signal,
+    });
+    const body = parseJson(await response.text());
+    if (response.status !== 200) {
+      const code = errorCodeOf(body);
+      return { kind: 'http_error', status: response.status, ...(code === undefined ? {} : { code }) };
+    }
+    // OBF の値は判定に使うだけで、返さない
+    return isObfTokenResponse(body) ? { kind: 'ok' } : { kind: 'malformed' };
+  } catch {
+    if (input.signal?.aborted === true) return { kind: 'aborted' };
+    if (timeout.aborted) return { kind: 'timeout' };
+    return { kind: 'network_error' };
+  }
+}
+
+function parseJson(text: string): unknown {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+}
+
+/** エラー本文の code（整数 0〜999999 のときだけ）。message など説明文は値を含みうるので使わない */
+function errorCodeOf(body: unknown): number | undefined {
+  if (typeof body !== 'object' || body === null) return undefined;
+  const { code } = body as Record<string, unknown>;
+  return typeof code === 'number' && Number.isInteger(code) && code >= 0 && code <= MAX_SAFE_ERROR_CODE
+    ? code
+    : undefined;
 }

@@ -148,10 +148,13 @@ export async function runOAuthFlow<U = never>(options: OAuthFlowOptions<U>): Pro
     codeVerifier: pkce.verifier,
     timeoutMs: options.tokenTimeoutMs,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.useAccessToken === undefined ? {} : { useAccessToken: options.useAccessToken }),
   });
   switch (token.kind) {
     case 'ok':
-      return { kind: 'succeeded', token: token.token };
+      return token.used === undefined
+        ? { kind: 'succeeded', token: token.token }
+        : { kind: 'succeeded', token: token.token, used: token.used };
     case 'malformed':
       return { kind: 'invalid_response', reason: 'token_malformed' };
     case 'aborted':
