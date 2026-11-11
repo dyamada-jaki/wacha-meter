@@ -12,15 +12,24 @@ export interface TokenSummary {
   readonly scope?: string;
 }
 
-export type TokenResult =
-  | { readonly kind: 'ok'; readonly token: TokenSummary }
+/** アクセストークンを使う後続処理の結果。例外は値を含みうるので、投げたことだけを残す */
+export type UseResult<U> = { readonly kind: 'returned'; readonly value: U } | { readonly kind: 'threw' };
+
+/**
+ * アクセストークンを受け取って後続の API を呼ぶ処理。トークンは引数としてだけ渡し、戻り値に含めない。
+ * signal は利用者の中断（後続処理の上限時間は後続処理の側で持つ）。
+ */
+export type UseAccessToken<U> = (accessToken: string, signal: AbortSignal | undefined) => Promise<U>;
+
+export type TokenResult<U = never> =
+  | { readonly kind: 'ok'; readonly token: TokenSummary; readonly used?: UseResult<U> }
   | { readonly kind: 'http_error'; readonly status: number; readonly errorCode?: string }
   | { readonly kind: 'malformed' }
   | { readonly kind: 'network_error' }
   | { readonly kind: 'timeout' }
   | { readonly kind: 'aborted' };
 
-export interface ExchangeCodeInput {
+export interface ExchangeCodeInput<U = never> {
   readonly tokenUrl: string;
   readonly clientId: string;
   readonly code: string;
@@ -28,6 +37,8 @@ export interface ExchangeCodeInput {
   readonly codeVerifier: string;
   readonly timeoutMs: number;
   readonly signal?: AbortSignal;
+  /** 指定すると、成功の検証後にアクセストークンを渡して呼ぶ（トークンの要求の上限の外） */
+  readonly useAccessToken?: UseAccessToken<U>;
 }
 
 /** トークン API の応答本文を検証する。成功の形でなければ undefined */
@@ -43,7 +54,7 @@ export function summarizeTokenResponse(body: unknown): TokenSummary | undefined 
   return { tokenType, expiresIn, ...(typeof scope === 'string' ? { scope } : {}) };
 }
 
-export async function exchangeCode(input: ExchangeCodeInput): Promise<TokenResult> {
+export async function exchangeCode<U = never>(input: ExchangeCodeInput<U>): Promise<TokenResult<U>> {
   const timeout = AbortSignal.timeout(input.timeoutMs);
   const signal = input.signal === undefined ? timeout : AbortSignal.any([input.signal, timeout]);
   try {

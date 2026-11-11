@@ -254,3 +254,132 @@ export function sendRawRequest(
     });
   });
 }
+
+// ---- 偽 Users API（OBF の要求先。Issue #8） ----
+// Zoom「OBF 認証」の例どおり、GET /v2/users/me/token?type=onbehalf に Bearer のアクセストークンで要求し、
+// 200 { "token": "..." } を返す。パス・クエリ（type=onbehalf だけ。meeting_id なし）・Authorization が
+// 偽トークン API の発行した値と一致するときだけ OBF を返し、違えば 400 を返す。
+// エラー本文の形（code / message）は公式資料に記載が無いので、テスト用のデータとしてだけ使う。
+
+export const FAKE_OBF_TOKEN = 'fake-obf-token-H8s';
+export const OBF_PATH = '/v2/users/me/token?type=onbehalf';
+
+export type ObfBehavior =
+  | 'ok'
+  | 'empty_token'
+  | 'no_token'
+  | 'number_token'
+  | 'not_json'
+  | 'http_201'
+  | 'http_401'
+  | 'http_403'
+  | 'http_400_bad_code'
+  | 'redirect'
+  | 'slow'
+  | 'cut';
+
+export interface ObfRequestRecord {
+  readonly method: string | undefined;
+  readonly url: string | undefined;
+  readonly authorization: string | undefined;
+}
+
+export interface FakeUsersApi {
+  /** OBF の要求先の URL */
+  readonly url: string;
+  readonly requests: () => readonly ObfRequestRecord[];
+  /** リダイレクト先に届いた要求 */
+  readonly redirectedRequests: () => readonly ObfRequestRecord[];
+  readonly close: () => Promise<void>;
+}
+
+export async function startFakeUsersApi(behavior: ObfBehavior): Promise<FakeUsersApi> {
+  const requests: ObfRequestRecord[] = [];
+  const redirected: ObfRequestRecord[] = [];
+  const record = (req: IncomingMessage): ObfRequestRecord => ({
+    method: req.method,
+    url: req.url,
+    authorization: req.headers.authorization,
+  });
+
+  const other: Server = createServer((req, res) => {
+    redirected.push(record(req));
+    res.writeHead(200, { 'content-type': 'application/json' });
+    res.end(JSON.stringify({ token: FAKE_OBF_TOKEN }));
+  });
+  await new Promise<void>((r) => other.listen(0, '127.0.0.1', r));
+  const otherPort = (other.address() as AddressInfo).port;
+
+  const server: Server = createServer((req, res) => {
+    requests.push(record(req));
+    const json = (status: number, value: unknown) => {
+      res.writeHead(status, { 'content-type': 'application/json' });
+      res.end(JSON.stringify(value));
+    };
+    const valid =
+      req.method === 'GET' && req.url === OBF_PATH && req.headers.authorization === `Bearer ${FAKE_ACCESS_TOKEN}`;
+    if (!valid) {
+      return json(400, { code: 300, message: `fake rejected the request ${FAKE_ACCESS_TOKEN}` });
+    }
+    switch (behavior) {
+      case 'ok':
+        return json(200, { token: FAKE_OBF_TOKEN });
+      case 'empty_token':
+        return json(200, { token: '' });
+      case 'no_token':
+        return json(200, { obf: FAKE_OBF_TOKEN });
+      case 'number_token':
+        return json(200, { token: 12345 });
+      case 'not_json':
+        res.writeHead(200, { 'content-type': 'text/html' });
+        res.end(`<html>${FAKE_OBF_TOKEN}</html>`);
+        return;
+      case 'http_201':
+        return json(201, { token: FAKE_OBF_TOKEN });
+      case 'http_401':
+        return json(401, { code: 124, message: `Invalid access token: ${FAKE_ACCESS_TOKEN}` });
+      case 'http_403':
+        return json(403, { code: 4711, message: `scopes missing for ${FAKE_ACCESS_TOKEN}` });
+      case 'http_400_bad_code':
+        return json(400, { code: `${FAKE_OBF_TOKEN}`, message: 'bad' });
+      case 'redirect':
+        res.writeHead(302, { location: `http://127.0.0.1:${otherPort}${OBF_PATH}` });
+        res.end();
+        return;
+      case 'slow':
+        setTimeout(() => json(200, { token: FAKE_OBF_TOKEN }), 2000);
+        return;
+      case 'cut':
+        // ヘッダーと本文の一部を送ってから接続を切る
+        res.writeHead(200, { 'content-type': 'application/json', 'content-length': '100' });
+        res.write('{"token":"');
+        setTimeout(() => res.destroy(), 20);
+        return;
+    }
+  });
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address() as AddressInfo;
+  const closeServer = (s: Server) =>
+    new Promise<void>((r) => {
+      s.closeAllConnections();
+      s.close(() => r());
+    });
+  return {
+    url: `http://127.0.0.1:${port}${OBF_PATH}`,
+    requests: () => requests,
+    redirectedRequests: () => redirected,
+    close: async () => {
+      await closeServer(server);
+      await closeServer(other);
+    },
+  };
+}
+
+/** 接続できない（待ち受けていない）ポートの URL を作る */
+export async function unusedUrl(path: string): Promise<string> {
+  const server = createServer();
+  await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
+  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((r) => server.close(() => r()));
+  return `http://127.0.0.1:${port}${path}`;
+}

@@ -1,10 +1,10 @@
 // OAuth 確認コマンドの結果の種類・利用者向けの文言・終了コード。
 // 文言には Client ID・認可 URL・認可コード・トークンを含めない。
 
-import type { TokenSummary } from './token.js';
+import type { TokenSummary, UseResult } from './token.js';
 
-export type OAuthOutcome =
-  | { readonly kind: 'succeeded'; readonly token: TokenSummary }
+export type OAuthOutcome<U = never> =
+  | { readonly kind: 'succeeded'; readonly token: TokenSummary; readonly used?: UseResult<U> }
   | { readonly kind: 'denied' }
   | {
       readonly kind: 'invalid_response';
@@ -30,7 +30,7 @@ export const EXIT_CODES = {
   interrupted: 130,
 } as const;
 
-export function exitCodeFor(outcome: OAuthOutcome): number {
+export function exitCodeFor<U>(outcome: OAuthOutcome<U>): number {
   switch (outcome.kind) {
     case 'succeeded':
       return EXIT_CODES.success;
@@ -61,7 +61,7 @@ const TOKEN_FAILED_LABELS = {
   timeout: 'トークン API の応答が上限時間内にありませんでした',
 } as const;
 
-export function describeOutcome(outcome: OAuthOutcome): string {
+export function describeOutcome<U>(outcome: OAuthOutcome<U>): string {
   switch (outcome.kind) {
     case 'succeeded': {
       const scope = outcome.token.scope === undefined ? '' : `・スコープ ${outcome.token.scope}`;
