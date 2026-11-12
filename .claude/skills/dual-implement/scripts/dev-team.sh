@@ -3,9 +3,11 @@
 # 値は CLAUDE.md / AGENTS.md の「開発設定」と合わせる。リポジトリのどの worktree で実行してもよい。
 #
 #   dev-team.sh precheck                    「開発可」の Issue があり、「着手中」も動いている開発チームも無ければ 0 で終わる
-#   dev-team.sh launch [--agent claude|codex]
+#   dev-team.sh launch [--agent claude|codex] [--close-self]
 #                                           「開発可」で番号のいちばん小さい Issue を「着手中」に替え、
 #                                           main の worktree に開発チームの端末を開いて dual-implement を送る（起動係が使う）
+#                                           --close-self を付けると、起動の成否にかかわらず、少し待ってからこの端末を閉じる
+#                                           （起動係の定期実行が付ける。Orca 1.4.254 から、定期実行の端末は終わっても閉じられないため）
 #   dev-team.sh claim <Issue番号>           この端末を Issue の開発チームとして登録する（dual-implement の最初に呼ぶ）
 #   dev-team.sh release <Issue番号>         開発チームを終える（「着手中」を外し、登録を消す）
 #   dev-team.sh close-self                  この端末を閉じる（finish-issue の最後の操作。release の後でないと断る）
@@ -24,6 +26,7 @@
 #   DEV_TEAM_COMMAND                           端末で起動するコマンド
 #   DEV_TEAM_PROMPT                            起動後に送る指示（{N} を Issue 番号に置き換える）
 #   DEV_TEAM_STATE_DIR                         登録のファイルを置く場所（既定は .git）
+#   DEV_TEAM_CLOSE_DELAY                       launch --close-self が端末を閉じるまでの秒数（既定 90）
 # 試験は dev-team.test.sh（orca と gh を偽物に差し替えて、起動の失敗と生存確認の扱いを確かめる）
 set -euo pipefail
 
@@ -79,6 +82,24 @@ teams() {
   alive "$handle" >/dev/null || status=$?
   if [ "$status" -eq 1 ]; then echo 0; else echo 1; fi
 }
+# 秒数を待ってから端末を閉じる処理を、このスクリプトやエージェントのコマンドから切り離して始める。
+# 起動係のエージェントが答えを書き終え、Orca が実行の記録に答えを残してから閉じるため、待ってから閉じる
+close_later() {
+  python3 - "$1" "$orca_bin" "$2" <<'PY'
+import os, subprocess, sys, time
+delay, orca, handle = float(sys.argv[1]), sys.argv[2], sys.argv[3]
+if os.fork():
+    sys.exit(0)
+os.setsid()
+if os.fork():
+    os._exit(0)
+null = os.open(os.devnull, os.O_RDWR)
+for fd in (0, 1, 2):
+    os.dup2(null, fd)
+time.sleep(delay)
+subprocess.run([orca, "terminal", "close", "--terminal", handle, "--json"])
+PY
+}
 own_handle() { [ -n "${ORCA_TERMINAL_HANDLE:-}" ] || die "Orca の端末の中で実行する（ORCA_TERMINAL_HANDLE が無い）"; echo "$ORCA_TERMINAL_HANDLE"; }
 
 cmd=${1:-}
@@ -92,6 +113,21 @@ case "$cmd" in
     ;;
 
   launch)
+    case " $* " in *" --close-self "*) close_self=1 ;; *) close_self=0 ;; esac
+    if [ "$close_self" -eq 1 ]; then
+      # 起動係の端末だけを閉じる。PO や開発チームとして登録された端末では閉じない
+      me=${ORCA_TERMINAL_HANDLE:-}
+      if [ -z "$me" ]; then
+        echo "（ORCA_TERMINAL_HANDLE が無いので、この端末は閉じない）"
+      elif { [ -f "$po_file" ] && [ "$(cat "$po_file")" = "$me" ]; } \
+        || { [ -f "$team_file" ] && [ "$(awk '{print $2}' "$team_file")" = "$me" ]; }; then
+        echo "（この端末は PO か開発チームとして登録されているので、閉じない）"
+      else
+        delay=${DEV_TEAM_CLOSE_DELAY:-90}
+        close_later "$delay" "$me"
+        echo "この端末（起動係）は ${delay} 秒後に閉じます"
+      fi
+    fi
     agent=claude
     [ "${1:-}" = "--agent" ] && agent=${2:?claude か codex}
     case "$agent" in
@@ -275,6 +311,19 @@ else: print("disabled " + found[0].get("id", ""))' "$root")
       none) ng "起動係の定期実行がある" "docs/workflow.md「開発チームを開く」の作り方で作る" ;;
       *) warn "起動係の定期実行" "Orca に照会できなかった（Orca の中で実行し直す）" ;;
     esac
+    case "$launcher" in
+      enabled*|disabled*)
+        launcher_id=$(printf '%s' "$autos" | python3 -c '
+import json, sys
+d = json.load(sys.stdin)
+found = [a for a in (d.get("result") or {}).get("automations") or []
+         if (a.get("runContext") or {}).get("path") == sys.argv[1]
+         and "dev-team.sh precheck" in ((a.get("precheck") or {}).get("command") or "")]
+print(("" if all("launch --close-self" in (a.get("prompt") or "") for a in found) else found[0].get("id", "")))' "$root")
+        if [ -z "$launcher_id" ]; then ok "起動係が終わったら自分の端末を閉じる（launch --close-self）"
+        else ng "起動係が終わったら自分の端末を閉じる（launch --close-self）" "docs/workflow.md「開発チームを開く」の指示文で orca automations edit --id ${launcher_id} --prompt \"…\""; fi ;;
+    esac
+
 
     echo
     if [ "$bad" -eq 0 ]; then echo "準備はそろっています"; else echo "足りない項目: ${bad} 件"; exit 1; fi

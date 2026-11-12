@@ -45,8 +45,8 @@
 
 ### 開発チームを開く（起動係）
 - PO か人間が、着手条件のそろった Issue に「開発可」を付ける
-- Orca の定期実行「開発チーム起動（<リポジトリ名>）」が15分おきに `dev-team.sh precheck` で確かめる。「開発可」の Issue があり、「着手中」の Issue も動いている開発チームも無いときだけ、起動係のエージェントが `dev-team.sh launch` を実行する。条件に合わないときはエージェントを起動しないので、費用はかからない
-- launch は、番号のいちばん小さい「開発可」の Issue を「着手中」に替え、main の worktree に開発チームの端末（`claude --model opus --effort high`）を開いて `/dual-implement N` を送る。定期実行のセッションは応答のあと Orca が自動で閉じるが、開発チームは別の端末なので残る
+- Orca の定期実行「開発チーム起動（<リポジトリ名>）」が15分おきに `dev-team.sh precheck` で確かめる。「開発可」の Issue があり、「着手中」の Issue も動いている開発チームも無いときだけ、起動係のエージェントが `dev-team.sh launch --close-self` を実行する。条件に合わないときはエージェントを起動しないので、費用はかからない
+- launch は、番号のいちばん小さい「開発可」の Issue を「着手中」に替え、main の worktree に開発チームの端末（`claude --model opus --effort high`）を開いて `/dual-implement N` を送る。`--close-self` を付けると、起動係の端末は90秒ほどあとに自分で閉じる（Orca 1.4.254 から、定期実行の端末は終わっても Orca が閉じず、新しい3回分は必ず残すため）。起動の結果は Orca の実行の記録（`orca automations runs`）に残る。開発チームは別の端末なので残る
 - 手で始めるときは、main の worktree の端末で `/dual-implement N` を打つ。dual-implement の最初に `dev-team.sh claim N` で登録される
 - 開発チームは同時に1つまで（なるべく並行しない）。finish-issue の最後の `dev-team.sh release N` で登録が外れ、次の「開発可」が拾われる。そのあと `dev-team.sh close-self` で開発チームが自分の端末を閉じる。結果は Issue レポートと Issue のコメントに残るので、端末が消えても読める
 
@@ -56,7 +56,7 @@ orca automations create --name "開発チーム起動（<リポジトリ名>）"
   --workspace path:<main の worktree の絶対パス> --workspace-mode existing --fresh-session \
   --provider claude --extra-agent-args="--model haiku" \
   --precheck "bash .claude/skills/dual-implement/scripts/dev-team.sh precheck" \
-  --prompt "起動係です。ファイルは変更しないでください。bash .claude/skills/dual-implement/scripts/dev-team.sh launch を1回だけ実行し、出力をそのまま報告して終わってください。"
+  --prompt "起動係です。ファイルは変更しないでください。bash .claude/skills/dual-implement/scripts/dev-team.sh launch --close-self を1回だけ実行し、出力をそのまま報告して終わってください。この端末はあとで自動で閉じます。"
 ```
 有効にする: `orca automations edit --id <ID> --enabled`（止めるときは `--disabled`）。時間帯を絞るなら `--trigger "*/15 9-22 * * *"` のようにする。手動の `orca automations run` は precheck を行わないので、試すときは定期の実行で確かめる。
 
