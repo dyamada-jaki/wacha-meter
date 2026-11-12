@@ -2,11 +2,11 @@
 
 オンライン会議に参加して「わちゃわちゃ」を観測し、終了時にスコアを参加者へ知らせるアプリ。
 現在は実現方法の調査・開発環境の準備段階。接続方式とスコア定義は未決。
-**仕様はすべて [docs/spec.md](docs/spec.md) にある。作業の前に必ず読むこと。**
+仕様の正本は [docs/spec.md](docs/spec.md)。作業に関係する箇所を読んでから始める。
 
 > このファイルと `AGENTS.md`（Codex 用）は同じ内容に保つ。直したら両方をそろえる。
 
-> **準備がまだなら、まず準備する。** このファイルに `<…>` が残っているあいだは、準備が済んでいない。最初の依頼が何であっても（「セットアップして」「〇〇を作りたい」など）、ほかの作業より先に [`.claude/skills/setup-project/SKILL.md`](.claude/skills/setup-project/SKILL.md) の手順で進める。制作の環境だけを整えて終えず、最後に `bash .claude/skills/dual-implement/scripts/dev-team.sh doctor` を通す。
+> **準備がまだなら、まず準備する。** このファイルの、コードの書式（`…`）の外に `<…>` が残っているあいだは、準備が済んでいない（`dev-team.sh doctor` と同じ判定。開発サーバーのコマンドの `<ポート>` のような、コードの書式の中の `<…>` は埋めなくてよい）。最初の依頼が何であっても（「セットアップして」「〇〇を作りたい」など）、ほかの作業より先に [`.claude/skills/setup-project/SKILL.md`](.claude/skills/setup-project/SKILL.md) の手順で進める。制作の環境だけを整えて終えず、最後に `bash .claude/skills/dual-implement/scripts/dev-team.sh doctor` を通す。
 
 ## 作るもの
 オンライン会議の観測・採点アプリ。無料を基本とし、Zoom の有料アカウントは候補に含めてよい。その他の追加課金を前提にしない。他者主催の会議も対象とする。SDK の用途・審査条件が未確認なので方式は採用保留。手元の PC で動く会議ボットとローカル解析を、[初期調査](docs/research/feasibility.md) に基づいて検討する。
@@ -84,9 +84,7 @@ PO（人間と仕様を話し合い、Issue を書く席。→ [docs/workflow.md
 `.claude/skills/implement-issue/SKILL.md`（Codex 用の `.agents/skills/implement-issue` は、このフォルダへのシンボリックリンク）に従う。Claude Code では `/implement-issue 番号`、Codex では「implement-issue スキルで Issue 番号」。
 
 ## 完了の定義
-- Issue の受け入れ条件をすべて満たす
-- 「開発設定」の確認コマンドがすべて通る。E2E・ミューテーションは、導入済みで対象となる場合に通す
-- PR 本文に「何をしたか」「どう確認したか」「確認したいこと」を書く
+開発者が「Issue の作業は終わった」と判断する基準は [docs/definition-of-done.md](docs/definition-of-done.md)。PR を作るときに1項目ずつ確かめる。
 
 ## 用語
 | 日本語 | コード上の名前 |

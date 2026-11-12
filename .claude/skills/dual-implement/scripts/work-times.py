@@ -10,6 +10,12 @@
 
 区切りは「ここから <名前> を始めた」という印だけを残し、次の印（または完了）までをその作業の時間とする。
 名前が「待ち」「終了」の区間は作業に数えない（人間・ワーカー・PO を待っている時間）。
+
+Orca 1.4.256 で確かめた読み方（Orca の表示が変わったら、ここを直してテンプレートにも戻す）:
+  - 既定の --json は簡易表示で、時刻・起動したモデル・送り主が出ない。どの照会にも --full を付ける
+  - worker-list は --run で Run を絞る（簡易表示の行には runId が無い）
+  - inbox は --terminal run:<Run ID> で Run あての記録だけを読む（全体の inbox は新しい 1000 件だけで、古い Run が欠ける）
+  - task-list の名前は task_title（無ければ title・display_name）
 """
 import json
 import os
@@ -72,20 +78,24 @@ def main():
 
     # ワーカー: 起動から完了まで + 中の「作業:」の印
     tasks = {t["id"]: t for t in orca("orchestration", "task-list", "--run", run_id)["tasks"]}
-    workers = [w for w in orca("orchestration", "worker-list")["workers"] if w["runId"] == run_id]
-    messages = [m for m in orca("orchestration", "inbox", "--limit", "1000")["messages"] if m["run_id"] == run_id]
+    workers = [w for w in orca("orchestration", "worker-list", "--run", run_id)["workers"]
+               if w.get("runId", run_id) == run_id]
+    messages = [m for m in orca("orchestration", "inbox", "--terminal", f"run:{run_id}", "--limit", "1000")["messages"]
+                if m.get("run_id", run_id) == run_id]
     for w in workers:
         d = orca("orchestration", "worker-show", "--dispatch", w["dispatchId"])
         start = ts(d["dispatch"]["createdAt"])
         end = ts(d["dispatch"]["completedAt"]) if d["dispatch"].get("completedAt") else None
         task = tasks.get(w["taskId"], {})
-        title = task.get("task_title") or task.get("display_name") or w["dispatchId"]
-        launch = d["worker"]["startOptions"]["launch"]["effective"]
+        title = task.get("task_title") or task.get("title") or task.get("display_name") or w["dispatchId"]
+        # 起動の記録が無いワーカー（古い Run など）は「既定」と出す
+        launch = ((d["worker"].get("startOptions") or {}).get("launch") or {}).get("effective") or {}
+        handle = d["worker"].get("agentTerminalHandle") or w.get("agentTerminalHandle") or w.get("terminal")
         who = f"{title}（{launch.get('model') or '既定'}・{launch.get('effort') or '既定'}）"
         rows.append((start, end, "（ワーカー全体）", who))
         marks = [(ts(m["created_at"]), m["subject"].split(":", 1)[1].strip())
                  for m in messages
-                 if m["type"] == "status" and m["from_handle"] == w["agentTerminalHandle"]
+                 if m["type"] == "status" and m.get("from_handle") == handle
                  and m["subject"].startswith("作業:")]
         if marks:
             rows += segments([(start, "（印の前）")] + marks, who, end)
