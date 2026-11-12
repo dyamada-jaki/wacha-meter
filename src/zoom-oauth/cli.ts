@@ -27,11 +27,11 @@ const USAGE = [
   `  npm run zoom:oauth [-- --timeout 秒]  ブラウザで Zoom のアプリ許可を行い、トークン取得を確かめる（待機は既定 ${DEFAULT_TIMEOUT_SECONDS} 秒、${MIN_TIMEOUT_SECONDS}〜${MAX_TIMEOUT_SECONDS}）`,
 ].join('\n');
 
-type ParsedArgs =
+export type ParsedArgs =
   | { readonly ok: true; readonly timeoutSeconds: number }
   | { readonly ok: false; readonly message: string };
 
-function parseArgs(argv: readonly string[]): ParsedArgs {
+export function parseArgs(argv: readonly string[]): ParsedArgs {
   let timeoutSeconds = DEFAULT_TIMEOUT_SECONDS;
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
@@ -51,10 +51,10 @@ function parseArgs(argv: readonly string[]): ParsedArgs {
   return { ok: true, timeoutSeconds };
 }
 
-type ClientIdResult = { readonly ok: true; readonly clientId: string } | { readonly ok: false; readonly message: string };
+export type ClientIdResult = { readonly ok: true; readonly clientId: string } | { readonly ok: false; readonly message: string };
 
 /** Public Client ID を読む。エラー文には値を含めない */
-function readPublicClientId(env: Readonly<Record<string, string | undefined>>): ClientIdResult {
+export function readPublicClientId(env: Readonly<Record<string, string | undefined>>): ClientIdResult {
   const value = env[PUBLIC_CLIENT_ID_VARIABLE];
   if (value === undefined || value.trim() === '') {
     return { ok: false, message: `${PUBLIC_CLIENT_ID_VARIABLE} が設定されていません。` };

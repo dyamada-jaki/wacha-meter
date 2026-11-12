@@ -9,9 +9,9 @@ import { buildAuthorizeUrl } from './authorize.js';
 import { classifyCallback, type CallbackResult } from './callback.js';
 import type { OAuthOutcome } from './outcome.js';
 import { createPkce, createState } from './pkce.js';
-import { exchangeCode } from './token.js';
+import { exchangeCode, type UseAccessToken } from './token.js';
 
-export interface OAuthFlowOptions {
+export interface OAuthFlowOptions<U = never> {
   readonly clientId: string;
   readonly authorizeUrl: string;
   readonly tokenUrl: string;
@@ -27,6 +27,8 @@ export interface OAuthFlowOptions {
   readonly log: (line: string) => void;
   /** 待受を始めたとき（テストでポートを知るため） */
   readonly onListening?: (address: { readonly address: string; readonly port: number }) => void;
+  /** 指定すると、トークン取得の成功後にアクセストークンを渡して呼ぶ（値は戻り値に含めない） */
+  readonly useAccessToken?: UseAccessToken<U>;
 }
 
 export const LOOPBACK_HOST = '127.0.0.1';
@@ -43,7 +45,7 @@ const CALLBACK_PAGE =
   '<!doctype html><html lang="ja"><head><meta charset="utf-8"><title>わちゃメーター</title></head>' +
   '<body><p>Zoom からの応答を受け取りました。この画面を閉じて、ターミナルの表示を確認してください。</p></body></html>';
 
-export async function runOAuthFlow(options: OAuthFlowOptions): Promise<OAuthOutcome> {
+export async function runOAuthFlow<U = never>(options: OAuthFlowOptions<U>): Promise<OAuthOutcome<U>> {
   if (isAborted(options.signal)) return { kind: 'interrupted' };
 
   const pkce = createPkce();
@@ -146,10 +148,13 @@ export async function runOAuthFlow(options: OAuthFlowOptions): Promise<OAuthOutc
     codeVerifier: pkce.verifier,
     timeoutMs: options.tokenTimeoutMs,
     ...(options.signal === undefined ? {} : { signal: options.signal }),
+    ...(options.useAccessToken === undefined ? {} : { useAccessToken: options.useAccessToken }),
   });
   switch (token.kind) {
     case 'ok':
-      return { kind: 'succeeded', token: token.token };
+      return token.used === undefined
+        ? { kind: 'succeeded', token: token.token }
+        : { kind: 'succeeded', token: token.token, used: token.used };
     case 'malformed':
       return { kind: 'invalid_response', reason: 'token_malformed' };
     case 'aborted':
